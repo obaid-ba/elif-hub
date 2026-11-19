@@ -1,0 +1,66 @@
+/* ELIFE Hub — design tokens
+   One accent (indigo, from the logo). Status colours are reserved for status.
+   All text colours pass WCAG AA (4.5:1) on --bg and --panel. */
+:root {
+  /* surfaces */
+  --bg: #F7F7F5;
+  --panel: #FFFFFF;
+  --sunken: #F2F1EE;
+  --hover: #EFEEEA;
+  --line: #E6E4E0;
+  --line-strong: #D3D0CB;
+
+  /* text */
+  --ink: #1C1B1A;
+  --ink-2: #4F4B46;
+  --ink-3: #69645E;
+
+  /* accent */
+  --accent: #5645D4;
+  --accent-hover: #4636B8;
+  --accent-press: #3A2A99;
+  --accent-soft: #EEEBFB;
+  --accent-ink: #3A2A99;
+
+  /* status (text / background) */
+  --ok: #15803D;      --ok-bg: #E7F4EB;
+  --warn: #A34A06;    --warn-bg: #FCF1E1;
+  --bad: #B42318;     --bad-bg: #FCEBEA;
+  --info: #1D4ED8;    --info-bg: #E9EFFC;
+  --neutral: #4F4B46; --neutral-bg: #EFEEEA;
+
+  /* journey stages: one hue family, lightness steps (never colour alone: label always shown) */
+  --stage-1: #CFCBF4;
+  --stage-2: #A99FEA;
+  --stage-3: #7B6BDF;
+  --stage-4: #5645D4;
+  --stage-5: #2E2470;
+
+  /* type */
+  --font: Inter, -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 24px;
+
+  /* spacing (4px grid) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+
+  /* shape and depth */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --sh-1: 0 1px 2px rgba(28, 27, 26, .05);
+  --sh-pop: 0 12px 32px -8px rgba(28, 27, 26, .22), 0 2px 6px rgba(28, 27, 26, .06);
+
+  /* sizes */
+  --row-h: 40px;
+  --control-h: 36px;
+  --sidebar-w: 300px;
+  --topbar-h: 52px;
+  --drawer-w: 800px;
+
+  --ease: 150ms cubic-bezier(.4, 0, .2, 1);
+}

@@ -1,0 +1,45 @@
+/* Beneficiary space (Défi 1): mobile-first overrides and the rating control. */
+
+/* 1-5 rating: five large radio cards */
+.rating { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-2); }
+.rating-opt { position: relative; display: block; }
+.rating-opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.rating-opt span { display: grid; place-items: center; min-height: 44px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--panel); font-weight: 600; font-variant-numeric: tabular-nums; transition: background var(--ease), border-color var(--ease); }
+.rating-opt:hover span { background: var(--sunken); }
+.rating-opt input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+.rating-opt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rating-field { border: 0; padding: 0; margin: 0; }
+.rating-field legend { padding: 0; margin-bottom: 6px; }
+.rating-legend { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-xs); color: var(--ink-3); }
+
+/* large touch targets (44px) in the beneficiary space, including the drawer rendered beside .app */
+.app.benef .btn, .app.benef .btn.sm, .app.benef .btn.icon, .app.benef .btn.icon.sm,
+.app.benef ~ #overlay-root .btn { min-height: 44px; }
+.app.benef .btn.icon, .app.benef .btn.icon.sm, .app.benef ~ #overlay-root .btn.icon { min-width: 44px; }
+.app.benef .nav-item { height: 44px; }
+.app.benef .input, .app.benef .select, .app.benef ~ #overlay-root .input, .app.benef ~ #overlay-root .select { height: 44px; }
+.app.benef .seg button { height: 38px; }
+.app.benef .check, .app.benef ~ #overlay-root .check { min-height: 44px; }
+.app.benef .list-row { min-height: 60px; }
+.app.benef .row-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.app.benef .list-row .body { overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .app.benef .topbar { gap: var(--s-2); }
+}
+@media (max-width: 600px) {
+  .app.benef .list-row { flex-wrap: wrap; align-items: flex-start; }
+  .app.benef .list-row .body { flex: 1 1 calc(100% - 52px); }
+  .app.benef .row-actions { flex: 1 1 100%; justify-content: stretch; }
+  .app.benef .row-actions .btn { flex: 1; }
+  .app.benef .page-head { margin-bottom: var(--s-4); }
+  .app.benef ~ #overlay-root .drawer { width: 100vw; }
+  .app.benef ~ #overlay-root .drawer-body { padding: var(--s-4); }
+  .app.benef ~ #overlay-root .drawer-head { padding: var(--s-3) var(--s-4); }
+  .app.benef ~ #overlay-root .drawer-foot { flex-direction: column-reverse; padding: var(--s-3) var(--s-4); }
+  .app.benef ~ #overlay-root .drawer-foot .btn { width: 100%; }
+  .app.benef ~ #overlay-root .dl { grid-template-columns: 1fr; gap: 0; }
+  .app.benef ~ #overlay-root .dl dt { margin-top: var(--s-2); }
+  .app.benef .dl { grid-template-columns: 1fr; gap: 0; }
+  .app.benef .stepper { grid-template-columns: repeat(5, minmax(0, 1fr)); font-size: 10.5px; }
+}
