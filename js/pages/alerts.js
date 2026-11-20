@@ -6,7 +6,7 @@
 
   const actionFor = (a) => {
     if (a.type === 'activity') return { label: S.can.writeOperational(a.centre) ? 'Clôturer' : 'Ouvrir', action: S.can.writeOperational(a.centre) ? 'close-activity' : 'open-activity' };
-    if (a.type === 'breport') return { label: 'Ouvrir', action: 'open-activity' };
+    if (a.type === 'breport' || a.type === 'conflict') return { label: 'Ouvrir', action: 'open-activity' };
     if (a.type === 'risk') return { label: S.can.writeOperational(a.centre) ? 'Saisir une séance' : 'Ouvrir la fiche', action: S.can.writeOperational(a.centre) ? 'new-session' : 'open-ent' };
     if (a.type === 'report') return { label: 'Ouvrir', action: S.isPmo() ? 'open-report' : 'go-report' };
     return { label: 'Ouvrir la fiche', action: 'open-ent' };

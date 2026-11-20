@@ -34,7 +34,19 @@
     return `<div class="panel">${checks.map((c) => `<div class="list-row">${C.ico('alert', 'warn')}<div class="body"><div class="title">${esc(c.text)}</div></div>${linkable ? `<div class="row-actions">${C.btn('Corriger', { action: c.kind === 'activity' ? (S.can.writeOperational(centre) ? 'close-activity' : 'open-activity') : 'open-ent', data: { id: c.id }, size: 'sm' })}</div>` : ''}</div>`).join('')}</div>`;
   };
 
-  const historyOf = (r) => S.data.audit.filter((a) => a.object === `Rapport ${EH.fmtMonth(r.period).toLowerCase()} · ${Q.centreName(S.data, r.centre)}`);
+  /** Remarks thread (PMO <-> centre). The form is a plain inner form, so it is omitted when the drawer itself is a form. */
+  const remarksBlock = (r, centre, period, { withForm = true, error, value, fid = 'fld-remark' } = {}) => {
+    const d = S.data, list = (r && r.remarks) || [];
+    const items = list.length ? `<ul class="remarks">${list.map((m) => `<li class="remark ${m.role === 'pmo' ? 'from-pmo' : ''}">${C.avatar(Q.user(d, m.by).name)}<div><div class="remark-head"><b>${esc(Q.user(d, m.by).name)}</b> <span class="muted xs">${m.role === 'pmo' ? 'PMO' : 'Chargé du centre'} · ${EH.fmtDateTime(m.at)}</span></div><p>${esc(m.text)}</p></div></li>`).join('')}</ul>` : '<p class="muted small">Aucune remarque pour le moment.</p>';
+    const canWrite = S.isPmo() || S.can.submitReport(centre);
+    const form = withForm && canWrite ? `<form data-form="report-remark" data-centre="${esc(centre)}" data-period="${esc(period)}" novalidate class="remark-form">
+        ${C.field({ name: 'remark', id: fid, label: S.isPmo() ? 'Ajouter une remarque pour le centre' : 'Répondre ou ajouter une remarque pour le PMO', type: 'textarea', rows: 2, value: value || '', error, placeholder: S.isPmo() ? 'Ex. : bon taux de présence, pensez à documenter la leçon apprise.' : 'Ex. : la formation du 22 a été reportée pour intempéries.', help: 'Visible par le PMO et le chargé du centre. Une remarque ne modifie pas les chiffres.' })}
+        <div style="display:flex;justify-content:flex-end">${C.btn('Ajouter la remarque', { type: 'submit', icon: 'message' })}</div></form>` : '';
+    return items + form;
+  };
+  EH.reportRemarks = remarksBlock;
+
+  const historyOf = (r) => S.data.audit.filter((a) => a.action !== 'Remarque sur le rapport' && a.object === `Rapport ${EH.fmtMonth(r.period).toLowerCase()} · ${Q.centreName(S.data, r.centre)}`);
 
   /* ---------- PMO: all reports ---------- */
   EH.pages.rapports = {
@@ -79,6 +91,7 @@
       <div class="section"><h3>Chiffres générés</h3><div class="panel">${figures(r.centre, r.period, r.status === 'approved' ? 'Période verrouillée : toute modification passe par une demande de correction.' : '')}</div></div>
       <div class="section"><h3>Contrôle qualité</h3>${checksList(r.centre, r.period, false)}</div>
       <div class="section"><h3>Commentaire du centre</h3><p class="small">${r.comment ? esc(r.comment) : '<span class="muted">Aucun commentaire.</span>'}</p></div>
+      <div class="section" id="report-remarks"><h3>Remarques <span class="muted num">${(r.remarks || []).length}</span></h3>${remarksBlock(r, r.centre, r.period, { withForm: st.mode !== 'return', error: st.errors.remark, value: st.values.remark, fid: 'fld-remark-d' })}</div>
       ${hist.length ? `<div class="section"><h3>Historique</h3><ul class="timeline">${hist.map((h) => `<li>${C.ico('history')}<div><div class="what">${esc(h.action)}${h.detail ? ' · ' + esc(h.detail) : ''}</div><div class="when">${EH.fmtDateTime(h.at)} · ${esc(Q.user(d, h.user).name)}</div></div></li>`).join('')}</ul></div>` : ''}
       ${st.mode === 'return' ? `<div class="section">${C.field({ name: 'reason', label: 'Motif du renvoi', type: 'textarea', required: true, error: st.errors.reason, value: st.values.reason, autofocus: true, help: 'Le chargé verra ce motif et corrigera avant de soumettre à nouveau.' })}</div>` : ''}`;
     let foot = '';
@@ -117,7 +130,7 @@
         C.seg('my.period', [{ value: closed, label: EH.fmtMonth(closed) }, { value: Q.currentPeriod(), label: EH.fmtMonth(Q.currentPeriod()) + ' (en cours)' }], period, 'Période')) +
         (banner ? `<div style="margin-bottom:var(--s-4)">${banner}</div>` : '') +
         `<div class="grid-2"><div class="stack">${C.panel({ title: 'Chiffres du mois', actions: C.statusBadge(RS, st), body: figures(centre, period) })}</div>
-         <div class="stack">${C.panel({ title: 'Contrôle qualité', count: checks.length, body: checks.length ? `<div>${checks.map((c) => `<div class="list-row">${C.ico('alert', 'warn')}<div class="body"><div class="title">${esc(c.text)}</div></div><div class="row-actions">${C.btn('Corriger', { action: c.kind === 'activity' ? 'close-activity' : 'open-ent', data: { id: c.id }, size: 'sm' })}</div></div>`).join('')}</div>` : C.empty({ title: 'Données propres', text: 'Aucun champ manquant, doublon ou activité non clôturée.' }) })}${submitPanel}</div></div>`;
+         <div class="stack">${C.panel({ title: 'Remarques', count: (r.remarks || []).length, flush: false, body: remarksBlock(r, centre, period, { error: (EH.ui.remarkErrors || {}).remark, value: EH.ui.remarkDraft }) })}${C.panel({ title: 'Contrôle qualité', count: checks.length, body: checks.length ? `<div>${checks.map((c) => `<div class="list-row">${C.ico('alert', 'warn')}<div class="body"><div class="title">${esc(c.text)}</div></div><div class="row-actions">${C.btn('Corriger', { action: c.kind === 'activity' ? 'close-activity' : 'open-ent', data: { id: c.id }, size: 'sm' })}</div></div>`).join('')}</div>` : C.empty({ title: 'Données propres', text: 'Aucun champ manquant, doublon ou activité non clôturée.' }) })}${submitPanel}</div></div>`;
     }
   };
 
@@ -153,6 +166,15 @@
     const res = EH.act.submitReport(S.scope(), Q.lastClosedPeriod(), v.comment);
     if (res.ok) { EH.ui.reportErrors = null; EH.ui.reportDraft = null; EH.render(); EH.toast('Rapport soumis au PMO. Vous serez notifié de sa validation.'); }
     else { EH.ui.reportErrors = res.errors; EH.render(); const f = document.getElementById('fld-comment'); if (f) f.focus(); }
+  };
+  EH.forms['report-remark'] = (v, form) => {
+    const res = EH.act.addReportRemark(form.dataset.centre, form.dataset.period, v.remark);
+    const st = EH.ui.drawer && EH.ui.drawer.type === 'report' ? EH.ui.drawer : null;
+    if (res.ok) {
+      if (st) { st.values.remark = ''; st.errors = {}; EH.renderOverlays(); } else { EH.ui.remarkErrors = null; EH.ui.remarkDraft = null; }
+      EH.render(); EH.toast(S.isPmo() ? 'Remarque ajoutée : le chargé du centre la verra sur son rapport.' : 'Remarque ajoutée : le PMO la verra sur le rapport.');
+    } else if (st) { st.values.remark = v.remark; st.errors = res.errors; EH.renderOverlays(true); }
+    else { EH.ui.remarkErrors = res.errors; EH.ui.remarkDraft = v.remark; EH.render(); const f = document.getElementById('fld-remark'); if (f) f.focus(); }
   };
   EH.forms.correction = (v) => {
     const m = EH.ui.modal;

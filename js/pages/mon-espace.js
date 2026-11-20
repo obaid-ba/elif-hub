@@ -21,6 +21,12 @@
         btn: [B().actionLabel(o), 'my-open-report', { id: a.id }] });
     });
     const cohort = d.cohorts.find((c) => c.id === e.cohort);
+    Q.exercisesOf(d, e.id).filter((x) => x.status === 'todo' || x.status === 'returned').forEach((x) => {
+      const late = Q.exerciseLate(x);
+      out.push({ sev: late || x.status === 'returned' ? 'bad' : 'warn', rank: late ? 0 : x.status === 'returned' ? 1 : 2, date: x.due, prog: cohort ? cohort.programme : '', icon: 'edit',
+        title: `${x.status === 'returned' ? 'Reprendre l’exercice' : 'Exercice'} « ${x.title} »`, meta: `Donné par votre chargé de programme · ${x.status === 'returned' ? 'à reprendre' : late ? 'en retard de ' + EH.plural(EH.ago(x.due), 'jour') : 'à rendre le ' + EH.fmtDate(x.due)}`, late,
+        btn: [x.status === 'returned' ? 'Reprendre' : 'Faire l’exercice', 'my-open-exercise', { id: x.id }] });
+    });
     d.deliverables.filter((x) => x.entrepreneur === e.id && x.status === 'expected' && x.due < EH.TODAY).forEach((x) =>
       out.push({ sev: 'bad', rank: 3, date: x.due, prog: cohort ? cohort.programme : '', icon: 'file', title: `Livrable en retard : ${x.title}`, meta: `Échéance le ${EH.fmtDate(x.due)} · à remettre à votre chargé de programme`, late: true, btn: ['Voir', 'go', { route: 'mon-parcours' }] }));
     Q.cohortActivities(d, e).filter((a) => a.status === 'planned' && a.date >= EH.TODAY && EH.days(EH.TODAY, a.date) <= 14).forEach((a) => {
@@ -67,6 +73,7 @@
       return C.pageHead('Mon parcours', `${C.stageBadge(e.stage)} · ${esc(e.idea)} · ${EH.plural(nSes, 'séance')} d’accompagnement. Cette page est en lecture seule.`) +
         `<div class="stack">${C.panel({ title: 'Mon étape', flush: false, body: stepper })}
         ${next ? C.panel({ title: 'Prochaine action', body: `<div class="list-row">${C.ico('flag', next.nextDue < EH.TODAY ? 'bad' : 'accent')}<div class="body"><div class="title">${esc(next.nextAction)}</div><div class="meta ${next.nextDue < EH.TODAY ? 't-bad' : ''}">Échéance ${EH.fmtDate(next.nextDue)}${next.nextDue < EH.TODAY ? ' · en retard' : ''} · fixée le ${EH.fmtDate(next.date)}</div></div></div>` }) : ''}
+        ${(() => { const ex = Q.exercisesOf(d, e.id); return C.panel({ title: 'Mes exercices', count: ex.length, body: ex.length ? ex.map((x) => `<div class="list-row">${C.ico('edit', Q.exerciseLate(x) ? 'bad' : x.status === 'validated' ? 'ok' : 'info')}<div class="body"><div class="title">${esc(x.title)}</div><div class="meta">À rendre le ${EH.fmtDate(x.due)}</div></div><div class="row-actions">${EH.exerciseBadge(x)}${C.btn(x.status === 'todo' || x.status === 'returned' ? 'Faire' : 'Voir', { action: 'my-open-exercise', data: { id: x.id }, size: 'sm' })}</div></div>`).join('') : C.empty({ icon: 'edit', tone: '', title: 'Aucun exercice', text: 'Les exercices donnés par votre chargé de programme apparaîtront ici.' }) }); })()}
         ${C.panel({ title: 'Mes livrables', count: dels.length, body: dels.length ? dels.map((x) => { const late = x.status === 'expected' && x.due < EH.TODAY; return `<div class="list-row">${C.ico('file', late ? 'bad' : x.status === 'validated' ? 'ok' : '')}<div class="body"><div class="title">${esc(x.title)}</div><div class="meta ${late ? 't-bad' : ''}">${EH.stageLabel(x.stage)} · échéance ${EH.fmtDate(x.due)}${late ? ' · en retard' : ''}</div></div><div class="row-actions">${C.badge(EH.DELIV[x.status][0], EH.DELIV[x.status][1])}</div></div>`; }).join('') : C.empty({ icon: 'file', tone: '', title: 'Aucun livrable', text: 'Vos livrables apparaîtront ici quand votre chargé de programme les aura définis.' }) })}
         ${C.panel({ title: 'Chronologie', flush: false, body: tl.length ? `<ul class="timeline">${tl.map((t) => `<li>${C.ico(t.icon, t.tone)}<div><div class="what">${esc(t.what)}</div><div class="when">${EH.fmtDateY(t.date)}${t.sub ? ' · ' + esc(t.sub) : ''}</div></div></li>`).join('')}</ul>` : '<p class="muted small">Rien à afficher.</p>' })}</div>`;
     }

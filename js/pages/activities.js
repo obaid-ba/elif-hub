@@ -21,6 +21,17 @@
     return `<div class="cal">${['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((x) => `<div class="dow">${x}</div>`).join('')}${cells.join('')}</div>`;
   };
 
+  const weekStart = (day) => EH.addDays(day, -((new Date(Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10))).getUTCDay() + 6) % 7));
+  const roomName = (id) => { const r = id && (S.data.rooms || []).find((x) => x.id === id); return r ? r.name : ''; };
+  EH.roomName = roomName;
+  const weekGrid = (list, start) => {
+    const days = Array.from({ length: 7 }, (_, i) => EH.addDays(start, i));
+    return `<div class="week">${days.map((day) => {
+      const evs = list.filter((a) => a.date === day).sort(EH.by('time'));
+      return `<div class="wday ${day === EH.TODAY ? 'today' : ''}"><div class="wd">${EH.fmtDay(day)}</div>${evs.length ? evs.map((a) => { const st = Q.activityStatus(a); return `<button class="ev ${st}" ${C.on('open-activity', { id: a.id })} title="${esc(a.title + ' · ' + AS[st].label)}"><b>${esc(a.time || '')}</b> ${esc(a.title)}<span>${esc([roomName(a.room) || (a.onlineLink ? 'En ligne' : ''), AS[st].label].filter(Boolean).join(' · '))}</span></button>`; }).join('') : '<span class="muted xs">—</span>'}</div>`;
+    }).join('')}</div>`;
+  };
+
   EH.pages.activites = {
     label: 'Activités', icon: 'calendar',
     render() {
@@ -33,7 +44,11 @@
       const w = !pmo;
 
       let body;
-      if (view === 'month') {
+      if (view === 'week') {
+        const start = weekStart(EH.f('act.week', EH.TODAY));
+        body = C.panel({ title: `Semaine du ${EH.fmtDate(start)} au ${EH.fmtDateY(EH.addDays(start, 6))}`, actions: C.btn('', { action: 'filter', data: { key: 'act.week', value: EH.addDays(start, -7) }, icon: 'chevronLeft', size: 'sm', title: 'Semaine précédente' }) + C.btn('Cette semaine', { action: 'filter', data: { key: 'act.week', value: EH.TODAY }, size: 'sm' }) + C.btn('', { action: 'filter', data: { key: 'act.week', value: EH.addDays(start, 7) }, icon: 'chevronRight', size: 'sm', title: 'Semaine suivante' }),
+          body: weekGrid(list, start) });
+      } else if (view === 'month') {
         const month = EH.f('act.month', EH.TODAY.slice(0, 7));
         const shift = (n) => { const y = +month.slice(0, 4), m = +month.slice(5, 7) - 1 + n; const dt = new Date(Date.UTC(y, m, 1)); return dt.toISOString().slice(0, 7); };
         body = C.panel({ title: EH.fmtMonth(month), actions: C.btn('', { action: 'filter', data: { key: 'act.month', value: shift(-1) }, icon: 'chevronLeft', size: 'sm', title: 'Mois précédent' }) + C.btn("Aujourd'hui", { action: 'filter', data: { key: 'act.month', value: EH.TODAY.slice(0, 7) }, size: 'sm' }) + C.btn('', { action: 'filter', data: { key: 'act.month', value: shift(1) }, icon: 'chevronRight', size: 'sm', title: 'Mois suivant' }),
@@ -42,7 +57,7 @@
         const rows = list.map((a) => {
           const st = Q.activityStatus(a), p = Q.programme(d, a.programme), fac = EH.partnerName(a.facilitator);
           return { cls: 'clickable', attrs: `${C.on('open-activity', { id: a.id })} tabindex="0"`, cells: [
-            `<span class="nowrap">${EH.fmtDay(a.date)}</span>`,
+            `<span class="nowrap">${EH.fmtDay(a.date)}</span><span class="sub">${esc(a.time || '')}</span>`,
             `${EH.activityLink(a)}<span class="sub">${esc(a.type)}${pmo ? ' · ' + esc(Q.centreName(d, a.centre)) : ''}</span>`,
             `<span class="truncate" style="display:block;max-width:200px">${esc(p ? p.name : '—')}</span>`,
             fac ? esc(fac) : '<span class="t-warn strong">À définir</span>',
@@ -53,9 +68,9 @@
         });
         body = C.panel({ body: C.table({ caption: 'Activités', cols: [{ label: 'Date' }, { label: 'Activité' }, { label: 'Programme', cls: 'hide-md' }, { label: 'Intervenant', cls: 'hide-sm' }, { label: 'Participants', cls: 'num hide-sm' }, { label: 'Statut' }, { label: '', cls: 'actions' }], rows, empty: C.empty({ icon: 'calendar', tone: '', title: 'Aucune activité', text: 'Aucune activité pour ces filtres.' }) }), foot: `<span class="muted xs">Les activités à clôturer apparaissent en premier, puis les prochaines, puis l'historique.</span>` });
       }
-      const statusSeg = C.seg('act.status', [{ value: '', label: 'Toutes', count: base.length }, ...['overdue', 'draft', 'planned', 'done', 'cancelled'].map((k) => ({ value: k, label: AS[k].label, count: counts[k] || 0 }))], status, 'Statut');
+      const statusSeg = C.seg('act.status', [{ value: '', label: 'Toutes', count: base.length }, ...['overdue', 'draft', 'planned', 'confirmed', 'done', 'cancelled'].map((k) => ({ value: k, label: AS[k].label, count: counts[k] || 0 }))], status, 'Statut');
       return C.pageHead('Activités', pmo ? 'Ateliers, formations et événements des six centres. Une activité « prévue » deux jours après sa date déclenche une alerte.' : 'Planifiez, puis clôturez avec les présences : les chiffres partent directement dans le rapport.',
-        C.seg('act.view', [{ value: 'list', label: 'Liste' }, { value: 'month', label: 'Mois' }], view, 'Affichage') + (w ? C.btn('Planifier une activité', { action: 'new-activity', icon: 'plus', variant: 'primary' }) : '')) +
+        C.seg('act.view', [{ value: 'list', label: 'Liste' }, { value: 'week', label: 'Semaine' }, { value: 'month', label: 'Mois' }], view, 'Affichage') + (w ? C.btn('Planifier une activité', { action: 'new-activity', icon: 'plus', variant: 'primary' }) : '')) +
         `<div class="toolbar">${C.search('act.q', 'Rechercher une activité…', EH.f('act.q', ''))}${pmo ? C.filterSelect('act.centre', 'Centre', EH.centreOptions(), centre) : ''}${C.filterSelect('act.prog', 'Programme', EH.programmeOptions(centre || null, 'Tous les programmes'), prog)}</div>` +
         `<div class="toolbar" style="overflow-x:auto">${statusSeg}</div>` + body;
     }
@@ -119,6 +134,10 @@
     const d = S.data, a = Q.activity(d, st.id);
     if (!a || !S.canSeeActivity(a)) return C.drawer({ title: 'Accès refusé', body: EH.denied('Cette activité') });
     const s = Q.activityStatus(a), w = S.can.writeOperational(a.centre), p = Q.programme(d, a.programme);
+    const clashes = Q.conflicts(d, a);
+    const FS = { proposed: ['Proposé', 'warn'], confirmed: ['Confirmé', 'ok'], refused: ['Refusé', 'bad'] };
+    const fs = a.facilitator && FS[a.facilitatorStatus];
+    const lines = (t) => t.split(/\n+/).map((x) => x.trim()).filter(Boolean);
     const lessons = d.knowledge.filter((k) => k.activity === a.id);
     const locked = Q.isLocked(d, a.centre, a.date);
     const att = a.attendees.map((id) => Q.ent(d, id)).filter(Boolean);
@@ -130,18 +149,25 @@
     ].join('') : '';
     const body = `
       ${s === 'overdue' ? C.callout('bad', `Prévue le ${EH.fmtDate(a.date)} et toujours pas clôturée : elle est signalée au PMO.`) : ''}
-      ${s === 'draft' ? C.callout('warn', "Brouillon : choisissez un intervenant pour qu'elle soit suivie (EC-01).") : ''}
+      ${s === 'draft' ? C.callout('warn', "Intervenant à trouver : choisissez un intervenant pour qu'elle soit suivie (EC-01).") : ''}
+      ${clashes.length ? C.callout('warn', `<b>Conflit de planning.</b><ul style="margin:4px 0 0;padding-left:18px">${clashes.map((c) => `<li>${esc(c.text)}</li>`).join('')}</ul>`) : ''}
       ${locked ? C.callout('info', 'Période validée : cette activité est verrouillée.') : ''}
       ${st.justClosed ? C.callout('ok', `<b>Activité clôturée${a.status === 'done' ? ' avec ' + EH.plural(a.attendees.length, 'présent') : ''}.</b> Ces chiffres comptent déjà dans le rapport du mois et le tableau de bord.${a.status === 'done' ? ' Voulez-vous noter ce que vous en retenez ?' : ''}`, a.status === 'done' ? C.btn('Noter une leçon apprise', { action: 'new-knowledge', data: { activity: a.id }, size: 'sm', variant: 'primary' }) + C.btn('Plus tard', { action: 'close-drawer', size: 'sm' }) : '') : ''}
       <dl class="dl">
-        <dt>Date</dt><dd>${EH.fmtDay(a.date)} ${EH.fmtDateY(a.date).slice(-4)} · ${esc(a.duration || '')}</dd>
+        <dt>Date</dt><dd>${EH.fmtDay(a.date)} ${EH.fmtDateY(a.date).slice(-4)}${a.time ? ' · ' + esc(EH.fmtTimeRange(a)) : ''}${a.duration ? ' (' + esc(a.duration) + ')' : ''}</dd>
         <dt>Programme</dt><dd>${esc(p ? p.name : '—')}</dd>
-        <dt>Centre</dt><dd>${esc(Q.centreName(d, a.centre))}</dd>
-        <dt>Intervenant</dt><dd>${a.facilitator ? `<button class="link-btn" ${C.on('open-partner', { id: a.facilitator })}>${esc(EH.partnerName(a.facilitator))}</button>` : '<span class="t-warn">À définir</span>'}</dd>
-        <dt>Lieu</dt><dd>${esc(a.location || '—')}</dd>
-        <dt>Participants</dt><dd class="num">${a.status === 'done' ? `${a.attendees.length} présents sur ${a.expected} attendus` : `${a.expected} attendus`}</dd>
+        <dt>Centre</dt><dd>${esc(Q.centreName(d, a.centre))}${a.cohort ? ' · ' + esc((d.cohorts.find((c) => c.id === a.cohort) || {}).name || '') : ''}</dd>
+        <dt>Intervenant</dt><dd>${a.facilitator ? `<button class="link-btn" ${C.on('open-partner', { id: a.facilitator })}>${esc(EH.partnerName(a.facilitator))}</button> ${fs ? C.badge(fs[0], fs[1]) : ''}` : '<span class="t-warn">À trouver</span>'}</dd>
+        ${a.staff && a.staff.length ? `<dt>Staff</dt><dd>${esc(a.staff.map((u) => Q.user(d, u).name).join(', '))}</dd>` : ''}
+        <dt>Lieu</dt><dd>${esc([roomName(a.room), a.location].filter(Boolean).join(' · ') || '—')}</dd>
+        ${a.onlineLink ? `<dt>Lien en ligne</dt><dd><a href="${esc(a.onlineLink)}" target="_blank" rel="noopener noreferrer">${esc(a.onlineLink)}</a></dd>` : ''}
+        ${a.contact ? `<dt>Contact</dt><dd>${esc(a.contact)}</dd>` : ''}
+        ${a.type === 'Session 1-1' && a.participant ? `<dt>Participant</dt><dd>${esc((Q.ent(d, a.participant) || {}).name || '—')}</dd>` : `<dt>Participants</dt><dd class="num">${a.status === 'done' ? `${a.attendees.length} présents sur ${a.expected} attendus` : `${a.expected} attendus`}</dd>`}
+        ${a.budget != null ? `<dt>Budget prévu</dt><dd class="num">${a.budget.toLocaleString('fr-FR')} DT</dd>` : ''}
+        ${a.equipment && a.equipment.length ? `<dt>Équipements</dt><dd>${a.equipment.map((x) => C.badge(x, 'outline')).join(' ')}</dd>` : ''}
         ${a.notes ? `<dt>Notes</dt><dd>${esc(a.notes)}</dd>` : ''}
       </dl>
+      ${a.content || a.supports ? `<div class="section"><h3>Contenu</h3>${a.content ? `<p class="small" style="white-space:pre-line">${esc(a.content)}</p>` : ''}${a.supports ? `<ul class="small" style="margin:6px 0 0;padding-left:18px">${lines(a.supports).map((x) => `<li>${/^https?:\/\//.test(x) ? `<a href="${esc(x)}" target="_blank" rel="noopener noreferrer">${esc(x)}</a>` : esc(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
       ${a.status === 'done' ? `<div class="section"><h3>Présents <span class="muted num">${att.length}</span></h3><p class="small">${att.length ? att.map((e) => esc(e.name)).join(', ') : '<span class="muted">Aucune présence saisie.</span>'}</p></div>` : ''}
       ${requirementSection(d, a)}
       ${reportsSection(d, a, st)}
@@ -155,20 +181,52 @@
     if (!st.reqInit) { EH.req.init(st, 'activity', st.id); st.reqInit = true; }
     const v = st.values, er = st.errors;
     const section = EH.req.section(st, 'activity', { programme: v.programme });
+    const d = S.data;
+    const cohorts = d.cohorts.filter((c) => c.centre === centre);
+    const cohortDefault = (cohorts.find((c) => c.programme === v.programme) || cohorts[0] || {}).id;
+    const rooms = (d.rooms || []).filter((r) => r.centre === centre);
+    const staffOpts = [{ value: '', label: 'Aucun' }, ...d.users.filter((u) => u.role === 'officer' && u.centre === centre).map((u) => ({ value: u.id, label: u.name }))];
+    const actives = d.entrepreneurs.filter((e) => e.centre === centre && R.activeStages.includes(e.stage)).sort((x, y) => x.name.localeCompare(y.name));
+    const oneToOne = v.type === 'Session 1-1';
+    const h = (t) => `<h3 class="form-sub">${t}</h3>`;
+    const clash = st.conflicts && st.conflicts.length ? C.callout('warn', `<b>Conflit de planning.</b><ul style="margin:4px 0 0;padding-left:18px">${st.conflicts.map((c) => `<li>${esc(c.text)}</li>`).join('')}</ul>Changez l'heure, la salle ou l'intervenant, ou planifiez quand même : le conflit sera inscrit au journal.`) : '';
     const planning = `
+      ${h('Activité')}
       ${C.field({ name: 'title', label: 'Titre', required: true, value: v.title, error: er.title, full: true, autofocus: true, placeholder: 'Ex. : Atelier étude de marché' })}
       ${C.field({ name: 'programme', label: 'Programme', type: 'select', required: true, value: v.programme, error: er.programme, options: EH.programmeOptions(centre, 'Choisir…') })}
-      ${C.field({ name: 'type', label: 'Type', type: 'select', required: true, value: v.type, error: er.type, options: ['', ...R.activityTypes] })}
+      ${C.field({ name: 'type', label: 'Type', type: 'select', required: true, value: v.type, error: er.type, options: ['', ...R.activityTypes], live: 'actType' })}
+      ${C.field({ name: 'cohort', label: 'Cohorte', type: 'select', required: true, value: v.cohort || cohortDefault, error: er.cohort, options: cohorts.map((c) => ({ value: c.id, label: `${c.name} · ${(Q.programme(d, c.programme) || {}).name || ''}` })) })}
+      ${oneToOne ? C.field({ name: 'participant', label: 'Participant', type: 'select', required: true, value: v.participant, error: er.participant, options: [{ value: '', label: 'Choisir…' }, ...actives.map((e) => ({ value: e.id, label: e.name }))], help: 'Une fois réalisée, la session compte comme une séance de coaching.' }) : C.field({ name: 'expected', label: 'Participants attendus', type: 'number', min: 0, value: v.expected != null && v.expected !== '' ? v.expected : actives.length })}
+      ${h('Quand et où')}
       ${C.field({ name: 'date', label: 'Date', type: 'date', required: true, value: v.date, error: er.date })}
-      ${C.field({ name: 'duration', label: 'Durée', value: v.duration, placeholder: 'Ex. : 3 h' })}
-      ${C.field({ name: 'facilitator', label: 'Intervenant', type: 'select', value: v.facilitator, options: EH.coachOptions('À définir (brouillon)'), full: true, help: "Sans intervenant, l'activité reste en brouillon." })}
-      ${C.field({ name: 'location', label: 'Lieu', value: v.location || 'Centre ELIFE ' + Q.centreName(S.data, centre) })}
-      ${C.field({ name: 'expected', label: 'Participants attendus', type: 'number', min: 0, value: v.expected || S.data.entrepreneurs.filter((e) => e.centre === centre && R.activeStages.includes(e.stage)).length })}`;
-    const body = `${C.formError(er)}${st.reqOnly ? C.callout('info', "Activité réalisée : seul le rapport demandé peut être modifié. Les rapports déjà remis restent attachés à la version à laquelle ils répondent.") : ''}<div class="form-grid">${st.reqOnly ? '' : planning}${section}</div>`;
-    return C.drawer({ title: st.reqOnly ? 'Rapport demandé' : st.id ? "Modifier l'activité" : 'Planifier une activité', sub: st.reqOnly ? esc(v.title) : `Centre de ${esc(Q.centreName(S.data, centre))}`, form: 'activity', body, foot: C.btn('Annuler', { action: 'close-drawer' }) + C.btn(st.reqOnly ? 'Enregistrer' : st.id ? 'Enregistrer' : 'Planifier', { type: 'submit', variant: 'primary' }) });
+      ${C.field({ name: 'time', label: 'Heure de début', type: 'time', required: true, value: v.time || '09:00', error: er.time })}
+      ${C.field({ name: 'durationMin', label: 'Durée (minutes)', type: 'number', min: 15, max: 720, value: v.durationMin || 180, error: er.durationMin })}
+      ${C.field({ name: 'room', label: 'Salle', type: 'select', value: v.room, error: er.room, options: [{ value: '', label: 'Aucune salle du centre' }, ...rooms.map((r) => ({ value: r.id, label: `${r.name} · ${r.capacity} places` }))] })}
+      ${C.field({ name: 'location', label: 'Lieu', value: v.location != null ? v.location : 'Centre ELIFE ' + Q.centreName(d, centre) })}
+      ${C.field({ name: 'onlineLink', label: 'Lien Meet ou Zoom', type: 'url', value: v.onlineLink, error: er.onlineLink, placeholder: 'https://…', help: v.type === 'Atelier en ligne' ? 'Obligatoire pour un atelier en ligne.' : 'Facultatif.' })}
+      ${h('Qui')}
+      ${C.field({ name: 'facilitator', label: 'Intervenant', type: 'select', value: v.facilitator, options: EH.coachOptions('À trouver'), full: true, help: "Sans intervenant, l'activité reste « intervenant à trouver ». Un nouvel intervenant est « proposé » jusqu'à sa confirmation." })}
+      ${C.field({ name: 'staff', label: 'Membre du staff', type: 'select', value: Array.isArray(v.staff) ? v.staff[0] : v.staff != null ? v.staff : (staffOpts[1] || {}).value, options: staffOpts })}
+      ${C.field({ name: 'contact', label: 'Contact sur place', value: v.contact, placeholder: 'Nom et téléphone' })}
+      ${h('Contenu')}
+      ${C.field({ name: 'content', label: 'Programme du jour', type: 'textarea', rows: 3, value: v.content, full: true, placeholder: 'Accueil, contenu, mise en pratique, questions…' })}
+      ${C.field({ name: 'supports', label: 'Supports (un par ligne, liens acceptés)', type: 'textarea', rows: 2, value: v.supports, full: true })}
+      ${h('Logistique')}
+      ${C.field({ name: 'budget', label: 'Budget prévu (DT)', type: 'number', min: 0, value: v.budget, error: er.budget })}
+      <div class="field"></div>
+      ${C.checks({ name: 'equipment', label: 'Équipements', grid: true, values: v.equipment || [], options: R.equipment.map((x) => ({ value: x, label: x })) })}`;
+    const body = `${C.formError(er)}${clash}${st.reqOnly ? C.callout('info', "Activité réalisée : seul le rapport demandé peut être modifié. Les rapports déjà remis restent attachés à la version à laquelle ils répondent.") : ''}<div class="form-grid">${st.reqOnly ? '' : planning}${section}</div>`;
+    return C.drawer({ title: st.reqOnly ? 'Rapport demandé' : st.id ? "Modifier l'activité" : 'Planifier une activité', sub: st.reqOnly ? esc(v.title) : `Centre de ${esc(Q.centreName(S.data, centre))}`, form: 'activity', body, foot: C.btn('Annuler', { action: 'close-drawer' }) + (clash && !st.reqOnly ? C.btn('Planifier quand même', { type: 'submit', extra: 'data-intent="force"' }) : '') + C.btn(st.reqOnly ? 'Enregistrer' : st.id ? 'Enregistrer' : 'Planifier', { type: 'submit', variant: 'primary' }) });
   };
-  EH.forms.activity = (v) => {
+  EH.live.actType = (el) => {
     const st = EH.ui.drawer;
+    if (!st || st.type !== 'activityForm') return;
+    st.values = EH.formData(el.form); EH.req.sync(st, st.values); EH.renderOverlays();
+    const t = document.getElementById('fld-type'); if (t) t.focus();
+  };
+  EH.forms.activity = (v, form, submitter) => {
+    const st = EH.ui.drawer;
+    st.values = v;
     EH.req.sync(st, v);
     const requirement = EH.req.parse(v, 'activity');
     if (st.reqOnly) {
@@ -176,15 +234,17 @@
       EH.handle(res, st, (r) => { EH.closeDrawer(); EH.render(); EH.toast(r.changed ? `Rapport demandé enregistré (version ${r.item.version}).` : 'Aucun changement.'); });
       return;
     }
-    const res = EH.act.saveActivity(Object.assign({ id: st.id }, v, { requirement }));
-    EH.handle(res, st, (r) => { EH.closeDrawer(); EH.render(); EH.toast(r.draft ? `« ${esc(r.item.title)} » enregistrée en brouillon : ajoutez un intervenant.` : `« ${esc(r.item.title)} » planifiée le ${EH.fmtDate(r.item.date)}.`, { label: 'Ouvrir', action: () => EH.openDrawer('activity', { id: r.item.id }) }); });
+    const res = EH.act.saveActivity(Object.assign({ id: st.id }, v, { requirement }), submitter && submitter.dataset.intent === 'force');
+    if (res.conflicts) { st.conflicts = res.conflicts; st.errors = {}; EH.renderOverlays(true); return; }
+    st.conflicts = null;
+    EH.handle(res, st, (r) => { EH.closeDrawer(); EH.render(); EH.toast(`« ${esc(r.item.title)} » planifiée le ${EH.fmtDate(r.item.date)} à ${esc(r.item.time)}${r.draft ? ' : intervenant à trouver' : ''}${r.clashes && r.clashes.length ? ' (conflit inscrit au journal)' : ''}`, { label: 'Ouvrir', action: () => EH.openDrawer('activity', { id: r.item.id }) }); });
   };
 
   /* ---------- close with attendance (US-04) ---------- */
   EH.drawers.closeActivity = (st) => {
     const d = S.data, a = Q.activity(d, st.id);
     const v = Object.assign({ status: 'done', attendees: null }, st.values), er = st.errors;
-    const cohort = d.entrepreneurs.filter((e) => e.centre === a.centre && e.cohort && e.stage !== 'candidat' && (e.stage !== 'abandon' || (Q.stageDate(e, 'abandon') || '') > a.date)).sort((x, y) => x.name.localeCompare(y.name));
+    const cohort = a.type === 'Session 1-1' && a.participant ? [Q.ent(d, a.participant)].filter(Boolean) : d.entrepreneurs.filter((e) => e.centre === a.centre && e.cohort && e.stage !== 'candidat' && (e.stage !== 'abandon' || (Q.stageDate(e, 'abandon') || '') > a.date)).sort((x, y) => x.name.localeCompare(y.name));
     const checked = v.attendees || cohort.filter((e) => R.activeStages.includes(e.stage)).map((e) => e.id);
     const body = `${C.formError(er)}
       ${C.radios({ name: 'status', label: 'Résultat', value: v.status, error: er.status, options: [{ value: 'done', label: 'Réalisée' }, { value: 'postponed', label: 'Reportée' }, { value: 'cancelled', label: 'Annulée' }] })}
@@ -216,7 +276,7 @@
   Object.assign(EH.actions, {
     'open-activity': (el) => { const a = Q.activity(S.data, el.dataset.id); if (a && !S.isBeneficiary() && !S.canSeeActivity(a)) EH.act.guardActivity(a); EH.openDrawer('activity', { id: el.dataset.id }); },
     'new-activity': () => { if (S.isOfficer()) EH.openDrawer('activityForm', {}); },
-    'edit-activity': (el) => { const a = Q.activity(S.data, el.dataset.id); if (!S.isOfficer()) return; EH.openDrawer('activityForm', { id: a.id, values: Object.assign({}, a), reqOnly: a.status === 'done' || el.dataset.req === '1' }); },
+    'edit-activity': (el) => { const a = Q.activity(S.data, el.dataset.id); if (!S.isOfficer()) return; EH.openDrawer('activityForm', { id: a.id, values: Object.assign({}, a, { staff: (a.staff || [])[0] || '' }), reqOnly: a.status === 'done' || el.dataset.req === '1' }); },
     'validate-breport': (el) => {
       const res = EH.act.reviewBeneficiaryReport(el.dataset.id, 'validate', '', el.dataset.version);
       if (!res.ok) return EH.toast(res.errors._ || 'Action impossible.', { tone: 'error' });

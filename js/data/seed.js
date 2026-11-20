@@ -225,7 +225,89 @@
     ];
 
     const seeded = EH.seedBeneficiaryReporting({ centres, users, entrepreneurs, activities, audit });
-    return Object.assign({ version: 4, centres, users, partners, programmes, cohorts, entrepreneurs, sessions, deliverables, activities, collaborations, knowledge, reports, audit, corrections: [] }, seeded);
+    const logistics = EH.seedLogistics({ centres, users, entrepreneurs, activities });
+    const base = Object.assign({ version: 5, rooms: logistics.rooms, centres, users, partners, programmes, cohorts, entrepreneurs, sessions, deliverables, activities, collaborations, knowledge, reports, audit, corrections: [] }, seeded);
+    return Object.assign(base, EH.seedIncubation(base));
+  };
+
+  /* ---------- Incubation follow-up: exercises given to beneficiaries, funders linked to projects ----------
+     Only needs entrepreneurs (also used to upgrade an older save, see store.load). */
+  EH.seedIncubation = function (d) {
+    const T = EH.TODAY, exercises = [], fundings = [];
+    const ents = (cid, stages) => d.entrepreneurs.filter((e) => e.centre === cid && stages.includes(e.stage));
+    const X = (e, title, instructions, given, due, status, answer = '', reviewComment = '') => exercises.push({
+      id: 'ex' + (exercises.length + 1), entrepreneurId: e.id, centre: e.centre, stage: e.stage, title, instructions, givenAt: given, due, status,
+      answer, link: '', submittedAt: status === 'submitted' || status === 'validated' ? EH.addDays(given, 4) + 'T18:20' : null,
+      reviewedAt: status === 'validated' || status === 'returned' ? EH.addDays(given, 6) + 'T10:00' : null, reviewComment, createdBy: 'u-' + e.centre, version: 1 });
+    const portal = d.entrepreneurs.filter((e) => e.portal);
+    const amira = portal.find((e) => e.centre === 'djerba') || ents('djerba', ['incub'])[0];
+    if (amira) {
+      X(amira, 'Rédiger la proposition de valeur', 'En 5 lignes : pour qui, quel problème, quelle solution, pourquoi vous plutôt qu’un concurrent.', EH.addDays(T, -20), EH.addDays(T, -12), 'validated', 'Pour les touristes en quête d’authenticité, des ateliers de poterie avec les artisans de Guellala, réservables en ligne.', 'Clair et concret. Gardez cette phrase pour le pitch.');
+      X(amira, 'Calculer le prix de revient d’un atelier', 'Listez tous les coûts (matière, four, temps de l’artisan, local) pour un atelier de 8 personnes. Utilisez le modèle partagé en séance.', EH.addDays(T, -8), EH.addDays(T, -1), 'submitted', 'Coût total : 236 DT pour 8 personnes, soit 29,5 DT par participant. Le four représente 30 % du coût.');
+      X(amira, 'Interviewer cinq clients potentiels', 'Posez les 6 questions du guide d’entretien à cinq personnes de votre cible et notez les réponses marquantes.', EH.addDays(T, -2), EH.addDays(T, 6), 'todo');
+    }
+    portal.filter((e) => e !== amira).forEach((e, i) => {
+      X(e, 'Mettre à jour le plan de trésorerie', 'Complétez les 6 prochains mois du plan de trésorerie avec les ventes réelles d’octobre.', EH.addDays(T, -15), EH.addDays(T, -3 - i), 'todo');
+      X(e, 'Préparer le pitch de 3 minutes', 'Enregistrez une vidéo de votre pitch (lien privé) en suivant la structure vue en atelier.', EH.addDays(T, -12), EH.addDays(T, -5), 'returned', 'https://exemple.tn/video-pitch', 'La partie marché est trop longue : réduisez-la à 30 secondes.');
+    });
+    ['djerba', 'beja', 'lekef', 'tozeur', 'siliana', 'sidibouzid'].forEach((cid) => {
+      const other = ents(cid, ['incub']).find((e) => !e.portal);
+      if (other) X(other, 'Lister les autorisations nécessaires', 'Identifiez les autorisations et le statut juridique adaptés à votre activité, avec leur coût.', EH.addDays(T, -6), EH.addDays(T, 8), 'todo');
+    });
+
+    const F = (partner, e, kind, amount, date, note = '') => fundings.push({ id: 'fu' + (fundings.length + 1), partner, entrepreneurId: e.id, centre: e.centre, kind, amount, date, note });
+    if (amira) F('pa2', amira, "Prêt d'honneur", 8000, '2026-10-20', 'Équipement du four et site de réservation');
+    ['djerba', 'beja', 'siliana', 'lekef', 'tozeur', 'sidibouzid'].forEach((cid, i) => {
+      const list = ents(cid, ['incub', 'suivi']).filter((e) => e !== amira);
+      if (list[0]) F('pa1', list[0], 'Subvention', 5000 + 1500 * i, '2026-09-1' + (i % 9), 'Fonds d’amorçage ELIFE');
+      if (list[1] && i % 2 === 0) F(cid === 'djerba' || cid === 'lekef' || cid === 'beja' ? 'pa2' : 'pa1', list[1], i ? 'Prix / concours' : 'Matériel / en nature', 3000 + 500 * i, '2026-10-0' + (i + 2));
+    });
+    return { exercises, fundings };
+  };
+
+  /* ---------- Backlog merge, phase 1: rooms, time slots, budget, equipment, content ----------
+     Idempotent: fills only missing fields, so it also upgrades a v4 save. Returns { rooms }. */
+  EH.seedLogistics = function (d) {
+    const rooms = d.rooms && d.rooms.length ? d.rooms : d.centres.flatMap((c) => [
+      { id: `ro-${c.id}-1`, centre: c.id, name: 'Salle de formation', capacity: 30 },
+      { id: `ro-${c.id}-2`, centre: c.id, name: 'Salle de réunion', capacity: 12 }
+    ]);
+    const idx = Object.fromEntries(d.centres.map((c, i) => [c.id, i]));
+    const SLOT = ['09:00', '11:00', '14:00', '16:00', '09:00', '16:00'];
+    const DUR = { Formation: 420, 'Événement': 120, Jury: 240, Visite: 120, 'Session 1-1': 60 };
+    const BUDGET = { Formation: 1200, Atelier: 400, 'Atelier en ligne': 100, 'Événement': 1500, 'Coaching collectif': 300, 'Mentorat collectif': 300, Jury: 500, Visite: 200, 'Session 1-1': 0 };
+    const EQUIP = { Formation: ['Vidéoprojecteur', 'Paperboard'], Atelier: ['Vidéoprojecteur', 'Paperboard'], 'Événement': ['Sonorisation', 'Vidéoprojecteur'], 'Atelier en ligne': ['Connexion internet'] };
+    const officer = (cid) => (d.centres.find((c) => c.id === cid) || {}).officer;
+    const fill = (a) => {
+      if (a.time) return;
+      const parsed = /jour/.test(a.duration || '') ? 420 : /(\d+)\s*h/.test(a.duration || '') ? +RegExp.$1 * 60 : 0;
+      a.durationMin = DUR[a.type] || parsed || 180;
+      a.duration = EH.fmtDuration(a.durationMin);
+      a.time = a.type === 'Formation' ? '09:00' : SLOT[idx[a.centre] || 0];
+      a.room = a.type === 'Visite' ? null : `ro-${a.centre}-${/Coaching|Mentorat/.test(a.type) ? 2 : 1}`;
+      a.staff = officer(a.centre) ? [officer(a.centre)] : [];
+      a.facilitatorStatus = a.facilitator ? 'confirmed' : null;
+      a.budget = BUDGET[a.type] != null ? BUDGET[a.type] : 300;
+      a.equipment = EQUIP[a.type] || ['Paperboard'];
+      a.content = a.content || `Accueil, ${a.title.charAt(0).toLowerCase() + a.title.slice(1)}, mise en pratique en petits groupes, questions.`;
+      a.supports = a.supports || '';
+      a.onlineLink = a.onlineLink || '';
+      a.contact = a.contact || `Chargé du centre : ${(d.users.find((u) => u.id === officer(a.centre)) || {}).name || '—'}`;
+      a.participant = a.participant || null;
+    };
+    d.activities.forEach(fill);
+    const add = (cid, prog, type, title, date, time, facilitator, extra) => {
+      if (d.activities.some((a) => a.centre === cid && a.title === title)) return;
+      const pool = d.entrepreneurs.filter((e) => e.centre === cid && e.cohort && ['preinc', 'incub', 'suivi'].includes(e.stage));
+      const a = { id: 'a' + (d.activities.length + 1), centre: cid, programme: prog, cohort: 'co-' + cid, type, title, date, location: 'Centre ELIFE ' + d.centres.find((c) => c.id === cid).name, facilitator, expected: pool.length, status: 'planned', attendees: [], notes: '' };
+      fill(a);
+      Object.assign(a, { time }, extra);
+      d.activities.push(a);
+    };
+    // PBI-25: one room clash (same room, overlapping slot) and one speaker not confirmed 2 days before
+    add('djerba', 'p1', 'Atelier', 'Atelier marketing digital', '2026-11-24', '17:00', 'pa9', {});
+    add('tozeur', 'p1', 'Formation', 'Formation comptabilité de base', '2026-11-21', '14:00', 'pa8', { durationMin: 180, duration: '3 h', facilitatorStatus: 'proposed' });
+    return { rooms };
   };
 
   /* ---------- Défi 1: beneficiary reporting (fictional data) ----------

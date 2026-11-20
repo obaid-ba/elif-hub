@@ -5,7 +5,7 @@
   const EH = window.EH;
   const Q = EH.q;
   const R = EH.REF;
-  const KEY = 'elife-hub:v4', LEGACY_KEY = 'elife-hub:v3';
+  const KEY = 'elife-hub:v5', V4_KEY = 'elife-hub:v4', LEGACY_KEY = 'elife-hub:v3';
 
   const store = (EH.store = { data: null, session: { userId: 'u-pmo' }, listeners: [] });
 
@@ -14,17 +14,25 @@
   store.migrate = (d) => {
     try { Object.assign(d, EH.seedBeneficiaryReporting(d), { version: 4 }); return d; } catch (e) { return null; }
   };
+  /** v4 -> v5: rooms, time slots, budget, equipment, content (backlog merge). */
+  store.migrate5 = (d) => {
+    try { const x = EH.seedLogistics(d); d.rooms = x.rooms; d.version = 5; return d; } catch (e) { return null; }
+  };
   store.load = () => {
     let saved = null;
     const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } };
     saved = read(KEY);
     if (!saved) {
-      const old = read(LEGACY_KEY);
-      if (old && old.data && old.data.version === 3) { const m = store.migrate(old.data); if (m) saved = { data: m, session: old.session }; }
+      const old = read(V4_KEY) || read(LEGACY_KEY);
+      let d = old && old.data;
+      if (d && d.version === 3) d = store.migrate(d);
+      if (d && d.version === 4) d = store.migrate5(d);
+      if (d) saved = { data: d, session: old.session };
     }
-    if (saved && saved.data && saved.data.version === 4) { store.data = saved.data; store.session = saved.session || store.session; }
+    if (saved && saved.data && saved.data.version === 5) { store.data = saved.data; store.session = saved.session || store.session; }
     else store.data = EH.seed();
     if (!store.user().id) store.session = { userId: 'u-pmo' };
+    if (!store.data.exercises || !store.data.fundings) { try { Object.assign(store.data, EH.seedIncubation(store.data)); } catch (e) { store.data.exercises = store.data.exercises || []; store.data.fundings = store.data.fundings || []; } }
     store.ensureSnapshots();
   };
   store.save = () => { try { localStorage.setItem(KEY, JSON.stringify({ data: store.data, session: store.session })); } catch (e) { /* storage unavailable: keep in memory */ } };
@@ -110,28 +118,48 @@
   };
 
   /* ---- activities (FR-01-03, FR-01-04) ---- */
-  A.saveActivity = (f) => {
+  A.saveActivity = (f, forceConflict) => {
     const centre = store.scope();
     if (!can.writeOperational(centre)) return fail('Seul le chargé du centre planifie ses activités.');
-    const e = required(f, [['programme', 'Le programme'], ['type', 'Le type'], ['title', 'Le titre'], ['date', 'La date']]);
+    const e = required(f, [['programme', 'Le programme'], ['type', 'Le type'], ['title', 'Le titre'], ['date', 'La date'], ['time', "L'heure"], ['cohort', 'La cohorte']]);
     if (f.date && locked(centre, f.date)) e.date = LOCK_MSG;
+    if (f.time && !/^\d{2}:\d{2}$/.test(f.time)) e.time = "L'heure doit être au format HH:MM.";
+    const durationMin = f.durationMin === '' || f.durationMin == null ? 180 : Number(f.durationMin);
+    if (!Number.isInteger(durationMin) || durationMin < 15 || durationMin > 720) e.durationMin = 'La durée doit être comprise entre 15 et 720 minutes.';
+    const budget = f.budget === '' || f.budget == null ? null : Number(f.budget);
+    if (budget != null && (!Number.isFinite(budget) || budget < 0)) e.budget = 'Le budget doit être un montant positif.';
+    if (f.onlineLink && !/^https?:\/\/\S+$/.test(f.onlineLink.trim())) e.onlineLink = 'Le lien doit commencer par http:// ou https://.';
+    if (f.type === 'Atelier en ligne' && !(f.onlineLink || '').trim()) e.onlineLink = 'Un atelier en ligne a besoin de son lien Meet ou Zoom.';
+    if (f.room && !(store.data.rooms || []).some((r) => r.id === f.room && r.centre === centre)) e.room = 'Choisissez une salle de votre centre.';
+    if (f.type === 'Session 1-1' && !f.participant) e.participant = 'Choisissez le participant de la session.';
     const rr = f.requirement ? normalizeRequirement(f.requirement, 'activity') : null;
     if (rr && rr.errors) Object.assign(e, rr.errors);
     if (Object.keys(e).length) return fail(e);
-    const cohort = store.data.cohorts.find((c) => c.programme === f.programme && c.centre === centre) || store.data.cohorts.find((c) => c.centre === centre);
+    const prev = f.id ? Q.activity(store.data, f.id) : null;
+    if (prev && locked(centre, prev.date)) return fail(LOCK_MSG);
+    const fields = {
+      programme: f.programme, cohort: f.cohort, type: f.type, title: f.title.trim(), date: f.date, time: f.time, durationMin, duration: EH.fmtDuration(durationMin),
+      location: f.location || '', room: f.room || null, facilitator: f.facilitator || null, staff: f.staff ? [f.staff] : [],
+      expected: f.type === 'Session 1-1' ? 1 : +f.expected || 0, participant: f.type === 'Session 1-1' ? f.participant : null,
+      budget, equipment: Array.isArray(f.equipment) ? f.equipment : f.equipment ? [f.equipment] : [],
+      content: (f.content || '').trim(), supports: (f.supports || '').trim(), onlineLink: (f.onlineLink || '').trim(), contact: (f.contact || '').trim()
+    };
+    fields.facilitatorStatus = !fields.facilitator ? null : prev && prev.facilitator === fields.facilitator ? prev.facilitatorStatus : 'proposed';
+    // PBI-06: clashes are warned, then allowed with an explicit "planifier quand même" (logged)
+    const clashes = Q.conflicts(store.data, Object.assign({ id: f.id || null, centre, status: 'planned' }, fields));
+    if (clashes.length && !forceConflict) return { ok: false, conflicts: clashes };
     let a;
-    if (f.id) {
-      a = Q.activity(store.data, f.id);
-      if (locked(centre, a.date)) return fail(LOCK_MSG);
-      Object.assign(a, { programme: f.programme, type: f.type, title: f.title.trim(), date: f.date, duration: f.duration, location: f.location, facilitator: f.facilitator || null, expected: +f.expected || 0 });
+    if (prev) {
+      a = Object.assign(prev, fields);
       store.log('Activité modifiée', a.title, EH.fmtDate(a.date), centre);
     } else {
-      a = { id: EH.uid('a'), centre, programme: f.programme, cohort: cohort ? cohort.id : null, type: f.type, title: f.title.trim(), date: f.date, duration: f.duration || '', location: f.location || '', facilitator: f.facilitator || null, expected: +f.expected || 0, status: 'planned', attendees: [], notes: '' };
+      a = Object.assign({ id: EH.uid('a'), centre, status: 'planned', attendees: [], notes: '' }, fields);
       store.data.activities.push(a);
-      store.log('Activité planifiée', a.title, a.facilitator ? EH.fmtDate(a.date) : 'Brouillon : intervenant à définir', centre);
+      store.log('Activité planifiée', a.title, a.facilitator ? `${EH.fmtDate(a.date)} à ${a.time}` : 'Intervenant à trouver', centre);
     }
+    if (clashes.length) store.log('Conflit de planning accepté', a.title, clashes.map((c) => c.text).join(' · '), centre);
     if (rr) applyRequirement('activity', a.id, rr.value, a.title, centre);
-    return commit({ ok: true, item: a, draft: !a.facilitator });
+    return commit({ ok: true, item: a, draft: !a.facilitator, clashes });
   };
   A.closeActivity = (id, f) => {
     const a = Q.activity(store.data, id);
@@ -145,18 +173,94 @@
     a.notes = f.notes || '';
     if (f.status === 'postponed') { a.date = f.newDate; a.status = 'planned'; }
     else a.status = f.status;
+    if (a.status === 'done' && a.type === 'Session 1-1' && a.participant && a.attendees.includes(a.participant) && !store.data.sessions.some((x) => x.activity === a.id)) {
+      store.data.sessions.push({ id: EH.uid('se'), entrepreneur: a.participant, centre: a.centre, date: a.date, type: 'Coaching', coach: a.facilitator, topic: a.title, nextAction: '', nextDue: null, activity: a.id });
+    }
     const label = { done: 'Activité réalisée', postponed: 'Activité reportée', cancelled: 'Activité annulée' }[f.status];
     store.log(label, a.title, f.status === 'done' ? EH.plural(a.attendees.length, 'présent') : a.notes || EH.fmtDate(a.date), a.centre);
     return commit({ ok: true, item: a });
   };
 
   /* ---- entrepreneurs (FR-02) ---- */
-  A.registerCandidate = (f, override) => {
-    const centre = store.scope();
-    if (!can.writeOperational(centre)) return fail('Seul le chargé du centre inscrit les candidats.');
+  /** Field checks shared by the manual form and the spreadsheet import. */
+  const candidateErrors = (f) => {
     const e = required(f, [['firstName', 'Le prénom'], ['lastName', 'Le nom'], ['idea', "L'idée de projet"]]);
     if (!f.phone && !f.email) e.phone = 'Indiquez un téléphone ou un e-mail.';
     if (f.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) e.email = "L'adresse e-mail n'est pas valide.";
+    if (f.phone && !/^\+?[\d\s.\-()]{8,20}$/.test(f.phone)) e.phone = 'Le téléphone doit contenir au moins 8 chiffres.';
+    if (f.birth && (!/^\d{4}-\d{2}-\d{2}$/.test(f.birth) || isNaN(Date.parse(f.birth)) || f.birth > EH.TODAY)) e.birth = 'La date de naissance doit être une date passée (JJ/MM/AAAA).';
+    if (f.sector && !R.sectors.includes(f.sector)) e.sector = `Secteur inconnu : choisir parmi ${R.sectors.join(', ')}.`;
+    if (f.source && !R.sources.includes(f.source)) e.source = `Source inconnue : choisir parmi ${R.sources.join(', ')}.`;
+    return e;
+  };
+  const newCandidate = (f, centre) => ({ id: EH.uid('e'), firstName: f.firstName.trim(), lastName: f.lastName.trim(), name: f.firstName.trim() + ' ' + f.lastName.trim(), gender: f.gender || '', birth: f.birth || '', phone: f.phone || '', email: f.email || '', centre, cohort: null, sector: f.sector || '', idea: f.idea.trim(), source: f.source || '', maturity: null, stage: 'candidat', history: [{ stage: 'candidat', date: EH.TODAY }], abandonReason: null, version: 1 });
+
+  /* ---- spreadsheet import: one verdict per row (insert / ignored duplicate / error) ---- */
+  const COLS = { firstName: 'Prénom', lastName: 'Nom', phone: 'Téléphone', email: 'E-mail', birth: 'Date de naissance', sector: 'Secteur', idea: 'Idée de projet', source: 'Source' };
+  A.IMPORT_COLUMNS = COLS;
+  const HEADER_ALIASES = {
+    firstName: ['prenom', 'first name', 'firstname', 'prenoms'], lastName: ['nom', 'last name', 'lastname', 'nom de famille'],
+    phone: ['telephone', 'tel', 'phone', 'mobile', 'gsm', 'numero'], email: ['e mail', 'email', 'mail', 'courriel', 'adresse e mail'],
+    birth: ['date de naissance', 'naissance', 'birth', 'date naissance'], sector: ['secteur', 'sector', 'secteur d activite'],
+    idea: ['idee de projet', 'idee', 'projet', 'idea', 'description du projet'], source: ['source', 'comment a t il connu elife', 'connu par', 'canal']
+  };
+  const matchList = (v, list) => { const n = EH.norm(v); return list.find((x) => EH.norm(x) === n) || v; };
+  const toIsoDate = (v) => {
+    if (v === '' || v == null) return '';
+    if (typeof v === 'number') return EH.sheet ? EH.sheet.serialToDate(v) : String(v);
+    const s = String(v).trim();
+    let m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    if (/^\d{4,5}$/.test(s) && EH.sheet) return EH.sheet.serialToDate(+s);
+    return s;
+  };
+  /** rows: raw sheet rows (first non-empty row = headers). Pure: nothing is written. */
+  A.analyzeImport = (rows) => {
+    const centre = store.scope();
+    if (!can.writeOperational(centre)) return fail('Seul le chargé du centre importe des candidats.');
+    const start = rows.findIndex((r) => r && r.some((c) => String(c).trim() !== ''));
+    if (start < 0) return fail('Le fichier est vide.');
+    const header = rows[start].map((h) => EH.norm(h));
+    const map = {};
+    Object.entries(HEADER_ALIASES).forEach(([k, al]) => { const i = header.findIndex((h) => al.includes(h)); if (i >= 0) map[k] = i; });
+    const missing = ['firstName', 'lastName', 'idea'].filter((k) => map[k] == null);
+    if (missing.length) return fail(`Colonnes obligatoires absentes : ${missing.map((k) => COLS[k]).join(', ')}. Téléchargez le modèle pour voir les en-têtes attendus.`);
+    if (map.phone == null && map.email == null) return fail('Il faut au moins une colonne Téléphone ou E-mail.');
+    const seen = [], out = [];
+    rows.slice(start + 1).forEach((r, i) => {
+      if (!r || !r.some((c) => String(c).trim() !== '')) return;
+      const cell = (k) => (map[k] == null || r[map[k]] == null ? '' : String(r[map[k]]).trim());
+      const v = { firstName: cell('firstName'), lastName: cell('lastName'), phone: cell('phone'), email: cell('email').toLowerCase(), birth: toIsoDate(map.birth == null ? '' : r[map.birth]), sector: cell('sector') && matchList(cell('sector'), R.sectors), idea: cell('idea'), source: cell('source') && matchList(cell('source'), R.sources) };
+      const line = start + i + 2;
+      const errors = candidateErrors(v);
+      if (Object.keys(errors).length) { out.push({ line, values: v, status: 'error', errors }); return; }
+      const dup = Q.duplicateEntrepreneur(store.data, v)[0];
+      const inFile = Q.duplicateEntrepreneur({ entrepreneurs: seen }, v)[0];
+      if (dup) out.push({ line, values: v, status: 'duplicate', reason: dup.centre === centre ? `Déjà inscrit dans votre centre : ${dup.name} (${EH.stageLabel(dup.stage)})` : `Déjà inscrit au centre de ${Q.centreName(store.data, dup.centre)}` });
+      else if (inFile) out.push({ line, values: v, status: 'duplicate', reason: `Doublon de la ligne ${inFile.line} du fichier` });
+      else { out.push({ line, values: v, status: 'ok' }); seen.push({ line, name: v.firstName + ' ' + v.lastName, phone: v.phone, email: v.email, birth: v.birth }); }
+    });
+    if (!out.length) return fail('Aucune ligne de données sous les en-têtes.');
+    const count = (s) => out.filter((x) => x.status === s).length;
+    return { ok: true, rows: out, summary: { ok: count('ok'), duplicate: count('duplicate'), error: count('error') } };
+  };
+  /** Inserts the valid rows of a fresh analysis; duplicates are ignored, rows with errors are left out. */
+  A.importCandidates = (rows) => {
+    const an = A.analyzeImport(rows);
+    if (!an.ok) return an;
+    const centre = store.scope(), items = an.rows.filter((x) => x.status === 'ok').map((x) => newCandidate(x.values, centre));
+    if (!items.length) return fail('Aucune ligne à insérer : toutes les lignes sont des doublons ou contiennent une erreur.');
+    store.data.entrepreneurs.push(...items);
+    store.log('Candidats importés', `Import de ${EH.plural(items.length, 'candidat')}`, `${an.summary.duplicate} doublon(s) ignoré(s) · ${an.summary.error} ligne(s) en erreur`, centre);
+    return commit({ ok: true, items, summary: an.summary });
+  };
+
+  A.registerCandidate = (f, override) => {
+    const centre = store.scope();
+    if (!can.writeOperational(centre)) return fail('Seul le chargé du centre inscrit les candidats.');
+    const e = candidateErrors(f);
     if (Object.keys(e).length) return fail(e);
     const dups = Q.duplicateEntrepreneur(store.data, f);
     if (dups.length && !override) {
@@ -164,7 +268,7 @@
       return { ok: false, duplicates: dups.map((x) => (x.centre === centre ? { id: x.id, name: x.name, own: true, stage: x.stage } : { own: false, centre: Q.centreName(store.data, x.centre) })) };
     }
     if (dups.length && override && !(override.reason || '').trim()) return fail({ override: 'Le motif est obligatoire pour enregistrer malgré le doublon.' });
-    const x = { id: EH.uid('e'), firstName: f.firstName.trim(), lastName: f.lastName.trim(), name: f.firstName.trim() + ' ' + f.lastName.trim(), gender: f.gender || '', birth: f.birth || '', phone: f.phone || '', email: f.email || '', centre, cohort: null, sector: f.sector || '', idea: f.idea.trim(), source: f.source || '', maturity: null, stage: 'candidat', history: [{ stage: 'candidat', date: EH.TODAY }], abandonReason: null, version: 1 };
+    const x = newCandidate(f, centre);
     store.data.entrepreneurs.push(x);
     store.log('Candidat inscrit', x.name, override ? `Doublon forcé : ${override.reason}` : x.idea, centre);
     return commit({ ok: true, item: x });
@@ -308,6 +412,19 @@
     r.status = 'returned'; r.returnReason = reason.trim();
     store.log('Rapport renvoyé', `Rapport ${EH.fmtMonth(r.period).toLowerCase()} · ${Q.centreName(store.data, r.centre)}`, reason, r.centre);
     return commit({ ok: true, item: r });
+  };
+  /** Remarks on a monthly report: a thread between the PMO and the centre. They never change the figures, so a validated (locked) report still accepts them. */
+  A.addReportRemark = (centre, period, text) => {
+    if (!store.isPmo() && !can.submitReport(centre)) return fail('Seuls le PMO et le chargé du centre peuvent commenter ce rapport.');
+    const t = String(text || '').trim();
+    if (!t) return fail({ remark: 'Écrivez la remarque avant de l’ajouter.' });
+    if (t.length > 1000) return fail({ remark: '1 000 caractères au maximum.' });
+    const r = ensureReport(centre, period);
+    r.remarks = r.remarks || [];
+    const m = { id: EH.uid('rm'), by: store.session.userId, role: store.role(), at: EH.nowIso(), text: t };
+    r.remarks.push(m);
+    store.log('Remarque sur le rapport', `Rapport ${EH.fmtMonth(period).toLowerCase()} · ${Q.centreName(store.data, centre)}`, t.length > 80 ? t.slice(0, 80) + '…' : t, centre);
+    return commit({ ok: true, item: m, report: r });
   };
   A.requestCorrection = (reportId, text) => {
     if (noBenef()) return noBenef();
@@ -494,6 +611,71 @@
     if (approve) { rep.status = 'returned'; rep.reviewComment = 'Correction acceptée : ' + c.text; rep.reviewedBy = store.session.userId; rep.reviewedAt = EH.nowIso(); rep.version++; }
     store.log(approve ? 'Correction de rapport acceptée' : 'Correction de rapport refusée', objectOf(e, a), approve ? `${BR.validated.label} → ${BR.returned.label}` : '', a.centre, approve ? { before: BR.validated.label, after: BR.returned.label } : null);
     return commit({ ok: true, item: rep });
+  };
+
+  /* ---- incubation follow-up: exercises (become actions for the beneficiary) and funders linked to projects ---- */
+  const EX = R.exerciseStatus;
+  const EX_CONFLICT = 'Cet exercice a été modifié entre-temps. Fermez-le et rouvrez-le pour voir la dernière version.';
+  A.giveExercise = (f) => {
+    const centre = store.scope();
+    if (!can.writeOperational(centre)) return fail('Seul le chargé du centre donne des exercices.');
+    const ids = (Array.isArray(f.entrepreneurs) ? f.entrepreneurs : [f.entrepreneurs]).filter(Boolean);
+    const e = required(f, [['title', 'Le titre'], ['instructions', 'La consigne'], ['due', "L'échéance"]]);
+    if (!ids.length) e.entrepreneurs = 'Choisissez au moins un bénéficiaire.';
+    if (f.due && f.due < EH.TODAY) e.due = "L'échéance ne peut pas être dans le passé.";
+    const targets = ids.map((id) => Q.ent(store.data, id));
+    if (targets.some((x) => !x || x.centre !== centre || !R.activeStages.includes(x.stage))) e.entrepreneurs = 'Choisissez des entrepreneurs actifs de votre centre.';
+    if (Object.keys(e).length) return fail(e);
+    const items = targets.map((x) => ({ id: EH.uid('ex'), entrepreneurId: x.id, centre, stage: x.stage, title: f.title.trim(), instructions: f.instructions.trim(), givenAt: EH.TODAY, due: f.due, status: 'todo', answer: '', link: '', submittedAt: null, reviewedAt: null, reviewComment: '', createdBy: store.session.userId, version: 1 }));
+    store.data.exercises.push(...items);
+    store.log('Exercice donné', items[0].title, `${targets.map((x) => x.name).join(', ')} · échéance ${EH.fmtDate(f.due)}`, centre);
+    return commit({ ok: true, items });
+  };
+  /** Beneficiary hands in his own exercise. */
+  A.submitExercise = (id, f, version) => {
+    const me = store.ownEnt(), x = store.data.exercises.find((y) => y.id === id);
+    if (!me || !x || x.entrepreneurId !== me.id) { A.denied('Exercice', 'Exercice d’un autre bénéficiaire'); return fail('Cet exercice ne fait pas partie de votre parcours. La tentative a été enregistrée.'); }
+    if (version != null && version !== '' && +version !== x.version) return fail(EX_CONFLICT);
+    if (x.status === 'submitted' || x.status === 'validated') return fail(x.status === 'validated' ? 'Cet exercice est déjà validé.' : 'Cet exercice est en cours de relecture.');
+    const e = {};
+    if (!String(f.answer || '').trim()) e.answer = 'Décrivez ce que vous avez fait.';
+    if (f.link && !/^https?:\/\/\S+$/.test(String(f.link).trim())) e.link = 'Le lien doit commencer par http:// ou https://.';
+    if (Object.keys(e).length) return fail(e);
+    const before = EX[x.status].label;
+    Object.assign(x, { answer: String(f.answer).trim(), link: String(f.link || '').trim(), status: 'submitted', submittedAt: EH.nowIso() }); x.version++;
+    store.log('Exercice rendu', `${me.name} · ${x.title}`, `${before} → ${EX.submitted.label}`, x.centre, { before, after: EX.submitted.label });
+    return commit({ ok: true, item: x });
+  };
+  /** Officer: validate or ask to redo (reason required). For an entrepreneur without a space, the officer may validate directly. */
+  A.reviewExercise = (id, decision, comment, version) => {
+    const x = store.data.exercises.find((y) => y.id === id);
+    if (!x) return fail('Exercice introuvable.');
+    if (!can.writeOperational(x.centre)) return fail('Action réservée au chargé du centre.');
+    if (version != null && version !== '' && +version !== x.version) return fail(EX_CONFLICT);
+    const ent = Q.ent(store.data, x.entrepreneurId);
+    if (x.status !== 'submitted' && !(decision === 'validate' && !ent.portal && x.status !== 'validated')) return fail('Seul un exercice rendu peut être relu.');
+    if (decision === 'return' && !String(comment || '').trim()) return fail({ reason: 'Expliquez ce qui doit être repris.' });
+    const before = EX[x.status].label;
+    x.status = decision === 'validate' ? 'validated' : 'returned'; x.reviewComment = String(comment || '').trim(); x.reviewedAt = EH.nowIso(); x.version++;
+    store.log(decision === 'validate' ? 'Exercice validé' : 'Exercice à reprendre', `${ent.name} · ${x.title}`, `${before} → ${EX[x.status].label}${x.reviewComment ? ' · ' + x.reviewComment : ''}`, x.centre, { before, after: EX[x.status].label });
+    return commit({ ok: true, item: x });
+  };
+  A.addFunding = (f) => {
+    const centre = store.scope();
+    if (!can.writeOperational(centre)) return fail('Seul le chargé du centre lie un financement à un projet.');
+    const e = required(f, [['partner', 'Le bailleur'], ['entrepreneur', 'Le projet'], ['kind', 'Le type de financement'], ['date', 'La date']]);
+    const p = f.partner && Q.partner(store.data, f.partner), x = f.entrepreneur && Q.ent(store.data, f.entrepreneur);
+    if (f.partner && !p) e.partner = 'Bailleur inconnu.';
+    if (f.entrepreneur && (!x || x.centre !== centre)) e.entrepreneur = 'Choisissez un projet de votre centre.';
+    if (f.kind && !R.fundingKinds.includes(f.kind)) e.kind = 'Type de financement inconnu.';
+    const amount = f.amount === '' || f.amount == null ? null : Number(f.amount);
+    if (amount != null && (!Number.isFinite(amount) || amount <= 0)) e.amount = 'Le montant doit être un nombre positif (en DT).';
+    if (Object.keys(e).length) return fail(e);
+    if (store.data.fundings.some((y) => y.partner === p.id && y.entrepreneurId === x.id && y.kind === f.kind)) return fail({ entrepreneur: 'Ce financement est déjà lié à ce projet.' });
+    const item = { id: EH.uid('fu'), partner: p.id, entrepreneurId: x.id, centre, kind: f.kind, amount, date: f.date, note: String(f.note || '').trim() };
+    store.data.fundings.push(item);
+    store.log('Financement lié', `${p.name} → ${x.name}`, `${f.kind}${amount ? ' · ' + amount + ' DT' : ''}`, centre);
+    return commit({ ok: true, item });
   };
 
   /** CSV export without personal data (FR-04-06, NFR-03). */

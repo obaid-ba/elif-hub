@@ -34,6 +34,11 @@
   EH.periodEnd = (p) => { const y = +p.slice(0, 4), m = +p.slice(5, 7); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
   EH.periodDue = (p) => EH.addDays(EH.periodEnd(p), 5); // BR-04-01: day 5 of next month
 
+  /** Times are 'HH:MM'; durations are minutes. */
+  EH.toMin = (t) => (t ? +t.slice(0, 2) * 60 + +t.slice(3, 5) : 0);
+  EH.fromMin = (m) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  EH.fmtDuration = (m) => (!m ? '' : m >= 420 ? Math.round(m / 420 * 10) / 10 + ' jour' + (m >= 840 ? 's' : '') : m % 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : m / 60 + ' h');
+  EH.fmtTimeRange = (a) => (a.time ? `${a.time.replace(':', ' h ')}–${EH.fromMin(EH.toMin(a.time) + (a.durationMin || 0)).replace(':', ' h ')}` : '');
   EH.pct = (v) => (v == null ? null : Math.round(v) + NBSP + '%');
   EH.plural = (n, one, many) => n + NBSP + (n > 1 ? many || one + 's' : one);
   EH.nowIso = () => EH.TODAY + 'T' + new Date().toTimeString().slice(0, 8);

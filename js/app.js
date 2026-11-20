@@ -15,8 +15,7 @@
     pmo: [
       { group: 'Pilotage', items: ['pilotage', 'alertes', 'rapports'] },
       { group: 'Programme', items: ['programmes', 'entrepreneurs', 'activites'] },
-      { group: 'Écosystème', items: ['partenaires', 'connaissances'] },
-      { group: 'Administration', items: ['journal'] }
+      { group: 'Écosystème', items: ['partenaires', 'connaissances'] }
     ],
     officer: [
       { group: 'Mon centre', items: ['aujourdhui', 'entrepreneurs', 'activites', 'rapport'] },
@@ -58,6 +57,7 @@
     if (!S.isBeneficiary()) return true;
     if (type === 'ent') return EH.act.guardEnt(Q.ent(S.data, props.id));
     if (BENEF_DRAWERS.includes(type)) return EH.act.guardActivity(Q.activity(S.data, props.id));
+    if (type === 'myExercise') { const x = (S.data.exercises || []).find((y) => y.id === props.id); if (x && x.entrepreneurId === S.user().entrepreneurId) return true; EH.act.denied('Exercice', 'Exercice d’un autre bénéficiaire'); return false; }
     EH.act.denied('Volet ' + type, 'Profil bénéficiaire');
     return false;
   };

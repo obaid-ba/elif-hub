@@ -9,7 +9,7 @@ HTML, CSS et JavaScript sans framework ni étape de build. Ouvrez `index.html` d
 2. En bas de la barre latérale, **Profil de démonstration** permet de passer en « Chargé · Djerba » (ou un autre centre) ou en **Bénéficiaire** (Amira Ben Salem à Djerba, ou les bénéficiaires de Béja et de Tozeur).
 3. Le bouton ↺ à côté réinitialise les données d'exemple.
 
-Les saisies sont conservées dans le navigateur (localStorage, clé `elife-hub:v4`). Une sauvegarde `elife-hub:v3` est migrée automatiquement (ajout du rôle bénéficiaire, des exigences de rapport et des rapports) ; si la migration échoue, les données d'exemple sont restaurées. Sans stockage disponible, l'application fonctionne en mémoire.
+Les saisies sont conservées dans le navigateur (localStorage, clé `elife-hub:v5`). Les sauvegardes `elife-hub:v3` et `elife-hub:v4` sont migrées automatiquement (rôle bénéficiaire et rapports, puis salles, créneaux et logistique) ; si la migration échoue, les données d'exemple sont restaurées. Sans stockage disponible, l'application fonctionne en mémoire.
 
 ## Scénario du PRD (5 minutes)
 
@@ -100,6 +100,36 @@ Le bénéficiaire ne voit jamais d'autres bénéficiaires, d'autres centres, d'i
 
 `tests/e2e.mjs` (Playwright + Chromium) couvre : les permissions et leur journalisation, le flux complet ci-dessus, la persistance après rechargement, la cohérence des indicateurs entre fiche, rapport mensuel et tableau de bord, le verrou optimiste, et la mise en page à 390 / 820 / 1440 px sans défilement horizontal. Lancement : `node tests/e2e.mjs` (voir l'en-tête du fichier pour les chemins de Playwright et de Chromium).
 
+## Fusion avec le Product Backlog final
+
+Le backlog final (26 PBI, après l'entretien client) est intégré par phases au prototype. Décisions retenues sur les conflits : statut « Confirmée » ajouté sans retirer les statuts existants ; une activité sans intervenant reste possible (« Intervenant à trouver ») ; valideur des rapports d'activité configurable par programme (PMO par défaut) ; documents stockés dans le navigateur et liens ; rôle Intervenant en lecture seule ; un seul script de démonstration.
+
+| Phase | Contenu | État |
+|---|---|---|
+| 1 · Données | Créneau (heure + durée en minutes), salle, staff, budget, équipements, programme du jour, supports, lien en ligne, contact, participant 1-1, statut de l'intervenant ; salles par centre ; migration v4 → v5 | Fait |
+| 2 · Planification (PBI-04 à 07) | Types « Atelier en ligne » et « Session 1-1 », cohorte obligatoire, heure ; vue Semaine ; couleur « Confirmée » ; conflits de salle, d'intervenant et de staff avertis avant l'enregistrement, « Planifier quand même » inscrit au journal, alerte « Conflit de planning » ; fiche d'activité complète (contenu, lien Meet/Zoom, contact, budget) ; une Session 1-1 réalisée crée la séance de coaching | Fait |
+| 3 · Intervenants (PBI-09 à 12) | Expertise, catégories, Proposé → Confirmé / Refusé, alerte J-3, recherche, historique, rôle Intervenant | À faire |
+| 4 · Participants (PBI-08, 13 à 15) | Rappels J-1 tracés (n8n optionnel), confirmation de venue, consentement | À faire |
+| 5 · Documents (PBI-16 à 18) | Onglet Documents, bibliothèque de modèles, pièces obligatoires | À faire |
+| 6 · Rapport d'activité (PBI-19, 20) | Pré-rempli, soumission, validation, verrou ; alimente le rapport mensuel | À faire |
+| 7 · Pilotage (PBI-21, 22) | Taux de présence, pièces manquantes, nouvelles alertes | À faire |
+| 8 · Démo (PBI-25, 26) | Données et script uniques | À faire |
+
+Cas de démonstration déjà présents (PBI-25) : conflit de salle à Djerba le 24 novembre (« Atelier étude de marché » 16 h et « Atelier marketing digital » 17 h, même salle) et intervenant non confirmé à Tozeur (« Formation comptabilité de base », 21 novembre).
+
+## Évolutions : graphiques PMO, remarques, import Excel, suivi d'incubation
+
+| Rôle | Où | Ce qui change |
+|------|----|---------------|
+| PMO | Pilotage | Panneau **Taux en graphiques** : une jauge circulaire par taux (exécution, couverture, abandon, remise, engagement) qui sert aussi de sélecteur, un graphique en barres par centre (ligne pointillée = valeur du programme) et la courbe des six derniers mois. Les tuiles d'indicateurs et le tableau de comparaison ont une barre de progression colorée (vert ≥ 80 %, orange ≥ 60 %, rouge en dessous ; inversé pour l'abandon : ≤ 10 % / ≤ 20 %). |
+| PMO | Menu | Le **Journal d'audit** n'est plus une page. Les actions restent enregistrées en interne (historique d'un rapport, « Accès refusé »). |
+| PMO et chargé | Rapport mensuel | Section **Remarques** : fil d'échange entre le PMO (tiroir du rapport) et le chargé (page « Rapport mensuel »). Une remarque ne change pas les chiffres : elle reste possible sur un rapport validé et verrouillé. |
+| Chargé | Inscrire un candidat | Deux onglets : **Saisie manuelle** (inchangée) et **Importer un fichier Excel** (.xlsx ou .csv). Modèle Excel téléchargeable. Chaque ligne reçoit un verdict avant insertion : *À insérer*, *Ignoré · doublon* (déjà inscrit dans le centre, dans un autre centre, ou doublon d'une ligne précédente du fichier) ou *Erreur* avec le champ fautif (prénom, nom ou idée manquants, ni téléphone ni e-mail, e-mail ou téléphone invalide, date de naissance future ou illisible, secteur ou source hors liste). Seules les lignes valides sont insérées ; l'import est journalisé avec ses compteurs. Réimporter le fichier corrigé ignore les lignes déjà insérées. |
+| Chargé | Aujourd'hui | Section **Incubation** à trois vues : **Phases** (pré-incubation, incubation, suivi : jours passés dans la phase contre la durée prévue de `REF.phaseTargets`, livrables, exercices), **Exercices** (donner un exercice à un ou plusieurs bénéficiaires, relire, valider ou renvoyer avec motif) et **Bailleurs de fonds** (financeurs du centre, programmes financés et projets liés, avec type et montant ; « Lier un financement »). Les exercices rendus et en retard remontent dans « À faire aujourd'hui » (filtre « Incubation »). |
+| Bénéficiaire | Mon espace, Mon parcours | Chaque exercice devient une **action** « Faire l'exercice » ; il le rend en ligne (texte + lien facultatif). Un exercice d'un autre bénéficiaire est refusé et journalisé. |
+
+Nouvelles données (`seed.js` → `EH.seedIncubation`, ajoutées automatiquement aux sauvegardes existantes) : `exercises` `{ entrepreneurId, title, instructions, due, status: todo|submitted|returned|validated, answer, link, version }` et `fundings` `{ partner, entrepreneurId, kind, amount, date }` ; `reports[].remarks[]`. La lecture des fichiers Excel se fait sans bibliothèque (`js/core/xlsx.js` : zip + XML, décompression native du navigateur).
+
 ## Architecture
 
 ```
@@ -113,6 +143,7 @@ css/
 js/
   core/util.js          dates, formats, normalisation, distance de Levenshtein
   core/icons.js         icônes SVG et logo
+  core/xlsx.js          lecture .xlsx / .csv et écriture du modèle .xlsx, sans dépendance
   data/reference.js     listes de référence et formules des KPI (configuration, NFR-10)
   data/seed.js          données de démonstration (personnes fictives)
   core/selectors.js     calculs purs : KPI, alertes, rapport, contrôles qualité
@@ -123,7 +154,9 @@ js/
   pages/requirement.js  section « Rapport demandé » partagée (tiroir d'activité, modèle de programme)
   pages/mon-espace.js   espace bénéficiaire : Mon espace et Mon parcours
   pages/mes-rapports.js espace bénéficiaire : Mes activités, Mes rapports et formulaire de rapport
+  pages/incubation.js   section Incubation du chargé (phases, exercices, bailleurs) et volets associés
 tests/e2e.mjs           vérification Playwright (hors application)
+tests/fixtures/         fichier Excel d'exemple pour l'import (doublons et erreurs inclus)
 ```
 
 Règles :
@@ -134,6 +167,6 @@ Règles :
 
 ## Couverture du backlog
 
-Toutes les stories MUST du PRD sont jouables (PBI-01 à 08, 12 à 16, 19 à 22, 27, 29, 30, 33, 35, 38 à 40), ainsi que plusieurs SHOULD : calendrier (09), livrables (18), contrôle qualité (23), export CSV (24), journal (26), doublon partenaire (28), fiche partenaire (31), invitation après activité (34), validation des connaissances (36), révision (37), définition des KPI (42).
+Toutes les stories MUST du PRD sont jouables (PBI-01 à 08, 12 à 16, 19 à 22, 27, 29, 30, 33, 35, 38 à 40), ainsi que plusieurs SHOULD : calendrier (09), livrables (18), contrôle qualité (23), export CSV (24), journal (26, tenu en interne, sans page dédiée), doublon partenaire (28), fiche partenaire (31), invitation après activité (34), validation des connaissances (36), révision (37), définition des KPI (42).
 
 Non couverts : tendances mensuelles (PBI-41), indicateurs par programme dans le rapport (PBI-10), ressources d'activité (PBI-11), import CSV (PBI-25), partenariat inactif configurable (PBI-32, fixé à 6 mois), e-mail matinal (PBI-43), synthèse IA (PBI-44), connexion réelle et contrôle des droits côté serveur (NFR-01, NFR-02).

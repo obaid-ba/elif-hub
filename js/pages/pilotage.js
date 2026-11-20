@@ -12,6 +12,68 @@
   };
   EH.periodSeg = periodSeg;
 
+  /* ---------- rate charts ---------- */
+  const RATES = [
+    { id: 'execution', label: 'Exécution des activités', short: 'Exécution' },
+    { id: 'coverage', label: 'Couverture coaching', short: 'Couverture' },
+    { id: 'abandon', label: "Taux d'abandon", short: 'Abandon', invert: true },
+    { id: 'reporting', label: 'Remise des rapports', short: 'Remise' },
+    { id: 'engagement', label: 'Engagement des bénéficiaires', short: 'Engagement' }
+  ];
+  const pct = (v) => Math.round(v) + EH.NBSP + '%';
+  const lastPeriods = (n) => {
+    const out = []; let y = +EH.TODAY.slice(0, 4), m = +EH.TODAY.slice(5, 7);
+    for (let i = 0; i < n; i++) { out.unshift(`${y}-${String(m).padStart(2, '0')}`); m--; if (!m) { m = 12; y--; } }
+    return out;
+  };
+
+  /** Ring gauge for one rate; doubles as the metric picker. */
+  const ring = (rate, v, selected) => {
+    const r = 26, c = 2 * Math.PI * r, frac = v == null ? 0 : Math.max(0, Math.min(100, v)) / 100;
+    return `<button type="button" class="ring-card" aria-pressed="${selected}" ${C.on('filter', { key: 'pil.rate', value: rate.id })} title="${esc(rate.label)}">
+      <svg viewBox="0 0 64 64" class="ring" aria-hidden="true"><circle cx="32" cy="32" r="${r}" class="ring-track"/>${v == null ? '' : `<circle cx="32" cy="32" r="${r}" class="ring-fill ${C.rateTone(v, rate.invert)}" stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 32 32)"/>`}</svg>
+      <span class="ring-val num">${v == null ? '—' : pct(v)}</span><span class="ring-label">${esc(rate.short)}</span></button>`;
+  };
+
+  /** Horizontal bars, one per centre, with the programme value as a reference line. */
+  const centreBars = (d, rate, period, overall) => {
+    const rows = d.centres.map((c) => ({ c, v: Q.kpis(d, c.id, period)[rate.id] }));
+    const label = rows.map((x) => `${x.c.name} ${x.v == null ? 'pas de donnée' : pct(x.v)}`).join(', ');
+    return `<div class="hbars" role="img" aria-label="${esc(rate.label + ' par centre : ' + label)}">${rows.map((x) => `<div class="hbar-row">
+      <span class="hbar-label">${esc(x.c.name)}</span>
+      <span class="hbar-track">${x.v == null ? '' : `<span class="hbar-fill ${C.rateTone(x.v, rate.invert)}" style="width:${Math.max(1, Math.min(100, x.v))}%"></span>`}${overall == null ? '' : `<i class="hbar-ref" style="left:${Math.min(100, overall)}%"></i>`}</span>
+      <span class="hbar-val num">${x.v == null ? '<span class="muted">—</span>' : pct(x.v)}</span></div>`).join('')}</div>
+      <div class="legend" style="margin-top:8px"><span><i class="dot ok-dot"></i>Objectif atteint</span><span><i class="dot warn-dot"></i>À surveiller</span><span><i class="dot bad-dot"></i>Critique</span>${overall == null ? '' : `<span><i class="ref-key"></i>Programme ${pct(overall)}</span>`}</div>`;
+  };
+
+  /** Line chart of the programme value over the last six months. */
+  const trendChart = (d, rate) => {
+    const ps = lastPeriods(6), pts = ps.map((p) => ({ p, v: Q.kpis(d, null, p)[rate.id] }));
+    const W = 560, H = 196, L = 34, Rr = 26, T = 24, B = 28;
+    const x = (i) => L + (i * (W - L - Rr)) / (ps.length - 1), y = (v) => T + (1 - v / 100) * (H - T - B);
+    const grid = [0, 25, 50, 75, 100].map((g) => `<line x1="${L}" x2="${W - Rr}" y1="${y(g)}" y2="${y(g)}" class="grid-line"/><text x="${L - 6}" y="${y(g) + 4}" class="axis" text-anchor="end">${g}</text>`).join('');
+    const known = pts.map((o, i) => ({ ...o, i })).filter((o) => o.v != null);
+    const path = known.map((o, j) => `${j ? 'L' : 'M'}${x(o.i).toFixed(1)},${y(o.v).toFixed(1)}`).join(' ');
+    const area = known.length > 1 ? `${path} L${x(known[known.length - 1].i).toFixed(1)},${y(0)} L${x(known[0].i).toFixed(1)},${y(0)} Z` : '';
+    const labels = ps.map((p, i) => `<text x="${x(i)}" y="${H - 8}" class="axis" text-anchor="middle">${EH.fmtDate(p + '-01').split(EH.NBSP)[1]}</text>`).join('');
+    const dots = known.map((o) => `<circle cx="${x(o.i)}" cy="${y(o.v)}" r="4" class="pt"><title>${EH.fmtMonth(o.p)} : ${pct(o.v)}</title></circle><text x="${x(o.i)}" y="${y(o.v) - 9}" class="pt-label" text-anchor="middle">${Math.round(o.v)}</text>`).join('');
+    const aria = pts.map((o) => `${EH.fmtMonth(o.p)} ${o.v == null ? 'pas de donnée' : pct(o.v)}`).join(', ');
+    return `<svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="${esc(rate.label + ', évolution : ' + aria)}">${grid}${area ? `<path d="${area}" class="area"/>` : ''}${path ? `<path d="${path}" class="line"/>` : ''}${dots}${labels}</svg>
+      ${known.length ? '' : '<p class="muted xs">Pas de donnée sur les six derniers mois.</p>'}<p class="muted xs" style="margin-top:4px">Six centres réunis · chiffres provisoires tant que les rapports ne sont pas validés.</p>`;
+  };
+
+  const rateCharts = (d, period, k) => {
+    const sel = RATES.find((r) => r.id === EH.f('pil.rate', 'execution')) || RATES[0];
+    return C.panel({
+      title: 'Taux en graphiques', actions: `<span class="muted xs">${esc(EH.fmtMonth(period))} · choisissez un taux</span>`, flush: false, id: 'rate-charts',
+      body: `<div class="rings" role="group" aria-label="Choisir le taux affiché">${RATES.map((r) => ring(r, k[r.id], r.id === sel.id)).join('')}</div>
+        <div class="chart-grid">
+          <div><h3 class="chart-title">${esc(sel.label)} par centre ${C.info(EH.REF.kpis[sel.id].formula)}</h3>${centreBars(d, sel, period, k[sel.id])}</div>
+          <div><h3 class="chart-title">Évolution sur six mois</h3>${trendChart(d, sel)}</div>
+        </div>`
+    });
+  };
+
   EH.pages.pilotage = {
     label: 'Pilotage', icon: 'gauge',
     render() {
@@ -36,9 +98,9 @@
             `<span class="strong nowrap">${esc(c.name)}</span><span class="sub nowrap">${esc(officer.name)}</span>`,
             C.stageBar(kc.byStage),
             `<span class="num">${kc.active ?? '—'}</span>`,
-            `<span class="${tone(kc.execution, 80, 60)}">${pctTxt(kc.execution)}</span>`,
-            `<span class="${tone(kc.coverage, 80, 60)}">${pctTxt(kc.coverage)}</span>`,
-            pctTxt(kc.abandon),
+            `<span class="${tone(kc.execution, 80, 60)}">${pctTxt(kc.execution)}</span>${C.meter(kc.execution)}`,
+            `<span class="${tone(kc.coverage, 80, 60)}">${pctTxt(kc.coverage)}</span>${C.meter(kc.coverage)}`,
+            `${pctTxt(kc.abandon)}${C.meter(kc.abandon, true)}`,
             C.statusBadge(EH.REF.reportStatus, st)
           ]
         };
@@ -63,7 +125,7 @@
       }).join('');
       const alertPanel = C.panel({ title: 'Alertes', count: alerts.length, actions: `<a href="#alertes" class="btn ghost sm">Tout voir</a>`, body: alertRows });
 
-      return head + EH.kpiStrip(k) + `<div class="grid-2" style="margin-top:var(--s-4)">${comparison}<div class="stack">${validate}${alertPanel}</div></div>`;
+      return head + EH.kpiStrip(k) + `<div style="margin-top:var(--s-4)">${rateCharts(d, period, k)}</div>` + `<div class="grid-2" style="margin-top:var(--s-4)">${comparison}<div class="stack">${validate}${alertPanel}</div></div>`;
     }
   };
 

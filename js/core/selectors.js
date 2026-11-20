@@ -44,7 +44,23 @@
   Q.activityStatus = (a) => {
     if (a.status === 'planned' && EH.ago(a.date) > R.OVERDUE_GRACE) return 'overdue';
     if (a.status === 'planned' && !a.facilitator) return 'draft';
+    if (a.status === 'planned' && a.facilitatorStatus === 'confirmed') return 'confirmed';
     return a.status;
+  };
+  /** PBI-06: same room, same speaker or same staff member on an overlapping slot. Only future planned activities count. */
+  Q.conflicts = (d, a) => {
+    if (a.status !== 'planned' || !a.date || !a.time || a.date < EH.TODAY) return [];
+    const s0 = EH.toMin(a.time), e0 = s0 + (a.durationMin || 0), out = [];
+    d.activities.forEach((b) => {
+      if (b.id === a.id || b.status !== 'planned' || b.date !== a.date || !b.time) return;
+      const s1 = EH.toMin(b.time), e1 = s1 + (b.durationMin || 0);
+      if (!(s0 < e1 && s1 < e0)) return;
+      const slot = `« ${b.title} » (${Q.centreName(d, b.centre)}, ${b.time})`;
+      if (a.room && a.room === b.room) out.push({ kind: 'room', other: b.id, text: `Salle déjà réservée : ${slot}` });
+      if (a.facilitator && a.facilitator === b.facilitator) out.push({ kind: 'speaker', other: b.id, text: `Intervenant déjà pris : ${slot}` });
+      if ((a.staff || []).some((u) => (b.staff || []).includes(u))) out.push({ kind: 'staff', other: b.id, text: `Membre du staff déjà pris : ${slot}` });
+    });
+    return out;
   };
   Q.needsClosing = (a) => a.status === 'planned' && a.date <= EH.TODAY;
   Q.inPeriod = (date, period) => date && date.slice(0, 7) === period;
@@ -284,6 +300,13 @@
     const out = [];
     d.activities.filter((a) => ids.includes(a.centre) && Q.activityStatus(a) === 'overdue').forEach((a) =>
       out.push({ type: 'activity', centre: a.centre, ref: a.id, title: a.title, detail: `Prévue le ${EH.fmtDate(a.date)}, non clôturée`, days: EH.ago(a.date), sev: 'bad' }));
+    const seenPair = new Set();
+    d.activities.filter((a) => ids.includes(a.centre)).forEach((a) => {
+      const list = Q.conflicts(d, a).filter((c) => !seenPair.has([c.other, a.id].join()));
+      if (!list.length) return;
+      list.forEach((c) => seenPair.add([a.id, c.other].join()));
+      out.push({ type: 'conflict', centre: a.centre, ref: a.id, title: a.title, detail: `${EH.fmtDate(a.date)} à ${a.time} · ${list.map((c) => c.text).join(' · ')}`, days: null, sev: 'warn' });
+    });
     d.entrepreneurs.filter((e) => ids.includes(e.centre) && Q.atRisk(d, e)).forEach((e) =>
       out.push({ type: 'risk', centre: e.centre, ref: e.id, title: e.name, detail: `${EH.stageLabel(e.stage)} · sans séance depuis ${Q.daysWithoutSession(d, e)} jours`, days: Q.daysWithoutSession(d, e) - R.RISK_DAYS, sev: 'warn' }));
     d.entrepreneurs.filter((e) => e.portal && ids.includes(e.centre)).forEach((e) => Q.obligations(d, e).filter((o) => o.late).forEach((o) =>
@@ -305,6 +328,7 @@
     activity: { label: 'Activité non clôturée', icon: 'calendar' },
     risk: { label: 'Sans séance depuis 30 j', icon: 'user' },
     breport: { label: 'Rapport bénéficiaire en retard', icon: 'report' },
+    conflict: { label: 'Conflit de planning', icon: 'clock' },
     report: { label: 'Rapport en retard', icon: 'report' },
     abandon: { label: 'Abandon ce mois-ci', icon: 'trendDown' }
   };
@@ -319,5 +343,29 @@
     if (bad >= 2 || (k.coverage != null && k.coverage < 60)) return 'bad';
     if (bad || alerts.length > 2 || (k.coverage != null && k.coverage < 80)) return 'warn';
     return 'ok';
+  };
+
+  /* ---------- incubation follow-up ---------- */
+  /** Phase progress of an active entrepreneur: days in the current phase against the expected length. */
+  Q.phaseProgress = (e) => {
+    const since = Q.stageDate(e, e.stage) || EH.TODAY, target = R.phaseTargets[e.stage] || null;
+    const days = Math.max(0, EH.ago(since));
+    return { since, days, target, pct: target ? (100 * days) / target : null, over: !!target && days > target };
+  };
+  Q.exercisesOf = (d, entId) => (d.exercises || []).filter((x) => x.entrepreneurId === entId);
+  Q.exerciseLate = (x) => (x.status === 'todo' || x.status === 'returned') && x.due < EH.TODAY;
+  /** Funders relevant to a centre: programme funders, "Financement" collaborations and funders already linked to a project. */
+  Q.centreFunders = (d, centre) => {
+    const ids = new Set();
+    d.programmes.filter((p) => p.funder && p.centres.some((pc) => pc.centre === centre)).forEach((p) => ids.add(p.funder));
+    d.collaborations.filter((c) => c.contribution === 'Financement' && (c.centre === centre || c.centre === 'all')).forEach((c) => ids.add(c.partner));
+    (d.fundings || []).filter((f) => f.centre === centre).forEach((f) => ids.add(f.partner));
+    d.partners.filter((p) => p.type === 'Financeur').forEach((p) => ids.add(p.id));
+    return [...ids].map((id) => Q.partner(d, id)).filter(Boolean).map((p) => ({
+      partner: p,
+      programmes: d.programmes.filter((x) => x.funder === p.id && x.centres.some((pc) => pc.centre === centre)),
+      collaborations: d.collaborations.filter((c) => c.partner === p.id && c.contribution === 'Financement' && (c.centre === centre || c.centre === 'all')),
+      projects: (d.fundings || []).filter((f) => f.partner === p.id && f.centre === centre).map((f) => ({ funding: f, ent: Q.ent(d, f.entrepreneurId) })).filter((x) => x.ent)
+    })).sort((a, b) => b.projects.length - a.projects.length || a.partner.name.localeCompare(b.partner.name));
   };
 })();

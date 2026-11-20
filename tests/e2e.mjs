@@ -202,6 +202,84 @@ await page.waitForTimeout(100);
 const rows = await page.$$eval('.table tbody tr', (n) => n.map((x) => x.textContent));
 check('Alerts list the overdue beneficiary reports (2)', rows.length === 2 && rows.some((t) => t.includes('Amira')), rows.map((t) => t.slice(0, 70)).join(' || '));
 
+/* ---------- 5b. backlog merge: phases 1-2 (data model, planning) ---------- */
+// Seeded demo cases (PBI-25)
+const seededCases = await ev(() => {
+  const d = EH.store.data;
+  const mk = d.activities.find((a) => a.title === 'Atelier marketing digital');
+  const compta = d.activities.find((a) => a.title === 'Formation comptabilité de base');
+  return { rooms: d.rooms.length, allTimed: d.activities.every((a) => a.time && a.durationMin), clash: EH.q.conflicts(d, mk).map((c) => c.kind), compta: EH.q.activityStatus(compta), confirmedCount: d.activities.filter((a) => EH.q.activityStatus(a) === 'confirmed').length, alert: EH.q.alerts(d, null).filter((a) => a.type === 'conflict').length };
+});
+check('Every activity has a time slot and rooms exist', seededCases.allTimed && seededCases.rooms === 12);
+check('Seeded room clash detected (room + staff)', seededCases.clash.includes('room') && seededCases.clash.includes('staff'), seededCases.clash.join());
+check('Seeded unconfirmed speaker stays "Prévue"', seededCases.compta === 'planned');
+check('Confirmed activities show "Confirmée"', seededCases.confirmedCount > 0);
+check('Clash appears once in alerts', seededCases.alert === 1, String(seededCases.alert));
+
+// Week view
+await as('u-tozeur');
+await page.goto(URL + '#activites'); await page.waitForTimeout(100);
+await page.click('.seg button:has-text("Semaine")'); await page.waitForTimeout(100);
+const week = await page.$$eval('.week .wday', (n) => n.map((x) => x.textContent));
+check('Week view shows 7 days with the activity and its time', week.length === 7 && week.some((t) => t.includes('14:00') && t.includes('Formation comptabilité')));
+
+// Plan through the form: online workshop needs a link, clash warns, "planifier quand même" logs it
+await as('u-djerba');
+await page.goto(URL + '#activites'); await page.waitForTimeout(100);
+await ev(() => EH.actions['new-activity']());
+await page.fill('.drawer [name=title]', 'Atelier réseaux sociaux');
+await page.selectOption('.drawer [name=programme]', 'p1');
+await page.selectOption('.drawer [name=type]', 'Atelier en ligne'); await page.waitForTimeout(100);
+await page.fill('.drawer [name=date]', '2026-11-24');
+await page.fill('.drawer [name=time]', '17:30');
+await page.fill('.drawer [name=durationMin]', '90');
+await page.selectOption('.drawer [name=room]', 'ro-djerba-1');
+await page.fill('.drawer [name=budget]', '250');
+await page.click('.drawer button[type=submit].primary'); await page.waitForTimeout(100);
+check('Online workshop without link: error next to the field', !!(await page.$('.drawer [name=onlineLink][aria-invalid=true]')));
+await page.fill('.drawer [name=onlineLink]', 'https://meet.exemple.tn/reseaux');
+await page.click('.drawer button[type=submit].primary'); await page.waitForTimeout(100);
+const clashText = (await page.textContent('.drawer')) || '';
+check('Clash warning shown before saving', /Conflit de planning/.test(clashText) && /Salle déjà réservée/.test(clashText));
+check('Nothing saved while the clash is unresolved', !(await ev(() => EH.store.data.activities.some((a) => a.title === 'Atelier réseaux sociaux'))));
+await page.click('.drawer button[data-intent=force]'); await page.waitForTimeout(150);
+const planned = await ev(() => { const a = EH.store.data.activities.find((x) => x.title === 'Atelier réseaux sociaux'); return a && { time: a.time, dur: a.durationMin, budget: a.budget, link: a.onlineLink, fs: a.facilitatorStatus, log: EH.store.data.audit.some((x) => x.action === 'Conflit de planning accepté' && x.object === a.title) }; });
+check('"Planifier quand même" saves and logs the clash', planned && planned.time === '17:30' && planned.dur === 90 && planned.budget === 250 && planned.log, JSON.stringify(planned));
+const newId = await ev(() => EH.store.data.activities.find((x) => x.title === 'Atelier réseaux sociaux').id);
+await ev((id) => EH.openDrawer('activity', { id }), newId);
+const dt = await page.textContent('.drawer');
+check('Drawer shows time, room, link, budget and the clash', dt.includes('17 h 30') && dt.includes('Salle de formation') && dt.includes('meet.exemple.tn') && /250\s*DT/.test(dt) && /Conflit de planning/.test(dt));
+await ev(() => EH.closeDrawer());
+
+// Session 1-1 (C4): closing it creates the coaching session
+const oneToOne = await ev(() => {
+  const d = EH.store.data, e = d.entrepreneurs.find((x) => x.centre === 'djerba' && x.stage === 'incub');
+  const r = EH.act.saveActivity({ title: 'Session 1-1 : prix de vente', programme: 'p1', cohort: 'co-djerba', type: 'Session 1-1', date: EH.TODAY, time: '08:00', durationMin: '60', participant: e.id, facilitator: 'pa11', staff: '' });
+  if (!r.ok) return { err: JSON.stringify(r) };
+  const before = d.sessions.filter((s) => s.entrepreneur === e.id).length;
+  const c = EH.act.closeActivity(r.item.id, { status: 'done', attendees: [e.id] });
+  return { ok: c.ok, expected: r.item.expected, added: d.sessions.filter((s) => s.entrepreneur === e.id).length - before };
+});
+check('Session 1-1 planned with one participant and becomes a coaching session', oneToOne.ok && oneToOne.expected === 1 && oneToOne.added === 1, JSON.stringify(oneToOne));
+const noParticipant = await ev(() => EH.act.saveActivity({ title: 'Session 1-1 sans participant', programme: 'p1', cohort: 'co-djerba', type: 'Session 1-1', date: '2026-11-30', time: '08:00', durationMin: '60' }));
+check('Session 1-1 without participant refused', !noParticipant.ok && !!noParticipant.errors.participant);
+
+// v4 save is migrated to v5
+const migrated = await ev(() => {
+  const d = JSON.parse(JSON.stringify(EH.seed()));
+  delete d.rooms; d.version = 4;
+  d.activities = d.activities.filter((a) => !['Atelier marketing digital', 'Formation comptabilité de base'].includes(a.title));
+  d.activities.forEach((a) => { ['time', 'durationMin', 'room', 'staff', 'facilitatorStatus', 'budget', 'equipment', 'content', 'supports', 'onlineLink', 'contact', 'participant'].forEach((k) => delete a[k]); a.duration = a.type === 'Formation' ? '1 jour' : '3 h'; });
+  localStorage.removeItem('elife-hub:v5');
+  localStorage.setItem('elife-hub:v4', JSON.stringify({ data: d, session: { userId: 'u-djerba' } }));
+  EH.store.load();
+  const x = EH.store.data;
+  return { version: x.version, rooms: (x.rooms || []).length, timed: x.activities.every((a) => a.time), demo: x.activities.some((a) => a.title === 'Atelier marketing digital'), reports: x.beneficiaryReports.length };
+});
+check('v4 save migrated to v5 (rooms, time slots, demo cases, reports kept)', migrated.version === 5 && migrated.rooms === 12 && migrated.timed && migrated.demo && migrated.reports >= 10, JSON.stringify(migrated));
+await ev(() => { localStorage.clear(); EH.store.load(); EH.render(); });
+await page.reload(); await page.waitForTimeout(150);
+
 /* ---------- 6. responsive (390 / 820 / 1440), no horizontal scroll ---------- */
 const views = [['mon-espace'], ['mes-activites'], ['mes-rapports'], ['mon-parcours']];
 for (const w of [390, 820, 1440]) {
@@ -223,6 +301,14 @@ for (const w of [390, 820, 1440]) {
     await page.screenshot({ path: path.join(os.tmpdir(), 'elife-benef-390.png') });
   }
   await ev(() => EH.closeDrawer());
+  await as('u-djerba');
+  await page.goto(URL + '#activites'); await page.waitForTimeout(100);
+  await ev(() => { EH.ui.f['act.view'] = 'week'; EH.render(); });
+  check(`No horizontal scroll activity week view @${w}`, (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
+  await ev(() => { EH.ui.f['act.view'] = 'list'; EH.actions['new-activity'](); });
+  await page.waitForTimeout(100);
+  check(`No horizontal scroll planning form @${w}`, (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0 && (await ev(() => { const dr = document.querySelector('.drawer-body'); return dr.scrollWidth <= dr.clientWidth; })));
+  await ev(() => EH.closeDrawer());
   await as('u-pmo');
   await page.goto(URL + '#pilotage'); await page.waitForTimeout(120);
   check(`No horizontal scroll PMO dashboard @${w}`, (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
@@ -233,6 +319,99 @@ await page.setViewportSize({ width: 1440, height: 900 });
 await as(I.amira);
 await page.keyboard.press('Tab');
 check('Visible focus on keyboard navigation', await ev(() => { const el = document.activeElement; const s = getComputedStyle(el); return el !== document.body && (s.outlineStyle !== 'none' || s.boxShadow !== 'none'); }));
+
+/* ---------- 8. PMO: rate charts, no audit page, report remarks ---------- */
+await page.setViewportSize({ width: 1440, height: 900 });
+await as('u-pmo');
+await page.goto(URL + '#pilotage'); await page.waitForTimeout(120);
+const pmoNav = await page.$$eval('.sidebar .nav-item', (n) => n.map((x) => x.textContent.trim()).join('|'));
+check('PMO menu has no audit log', !/Journal/.test(pmoNav), pmoNav);
+await ev(() => { location.hash = 'journal'; }); await page.waitForTimeout(120);
+check('#journal is no longer a page', (await ev(() => EH.ui.route)) === 'pilotage');
+check('Dashboard charts five rates', (await page.$$('#rate-charts .ring-card')).length === 5 && (await page.$$('#rate-charts .hbar-row')).length === 6 && !!(await page.$('#rate-charts svg.trend path.line')));
+await page.click('#rate-charts .ring-card:nth-child(2)'); await page.waitForTimeout(80);
+check('Picking a ring switches the chart', /Couverture coaching par centre/.test(await page.textContent('#rate-charts')));
+check('Comparison table shows rate meters', (await page.$$('#main .grid-2 .table .meter')).length >= 12);
+await ev(() => EH.openDrawer('report', { id: 'r-tozeur' }));
+await page.click('.drawer [data-form=report-remark] button[type=submit]'); await page.waitForTimeout(60);
+check('Empty remark refused', /Écrivez la remarque/.test(await page.textContent('.drawer')));
+await page.fill('#fld-remark-d', 'Bonne explication de la baisse de présence : ajoutez le plan de rattrapage.');
+await page.click('.drawer [data-form=report-remark] button[type=submit]'); await page.waitForTimeout(80);
+check('PMO adds a remark on a report', /plan de rattrapage/.test(await page.textContent('.drawer .remarks')) && (await ev(() => EH.store.data.reports.find((r) => r.id === 'r-tozeur').remarks.length)) === 1);
+await ev(() => EH.closeDrawer());
+await as('u-tozeur');
+await page.goto(URL + '#rapport'); await page.waitForTimeout(120);
+check('Officer sees the PMO remark on his report', /plan de rattrapage/.test(await page.textContent('#main')));
+await page.fill('#fld-remark', 'Plan de rattrapage : deux ateliers en décembre.');
+await page.click('[data-form=report-remark] button[type=submit]'); await page.waitForTimeout(80);
+check('Officer replies with a remark', (await ev(() => EH.store.data.reports.find((r) => r.id === 'r-tozeur').remarks.map((m) => m.role).join(','))) === 'pmo,officer');
+check('Other centre cannot comment', (await ev(() => EH.act.addReportRemark('beja', '2026-10', 'test').ok)) === false);
+
+/* ---------- 9. officer: candidate import from Excel ---------- */
+await as('u-djerba');
+await page.goto(URL + '#entrepreneurs'); await page.waitForTimeout(120);
+const before9 = await ev(() => EH.store.data.entrepreneurs.length);
+await page.click('[data-action=import-candidates]'); await page.waitForTimeout(80);
+check('Import tab open with template button', !!(await page.$('.drawer [data-action=cand-template]')) && !!(await page.$('.drawer #import-file')));
+await page.setInputFiles('.drawer #import-file', path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'candidats.xlsx'));
+await page.waitForFunction(() => EH.ui.drawer && (EH.ui.drawer.analysis || EH.ui.drawer.importError), null, { timeout: 3000 });
+const an = await ev(() => EH.ui.drawer.analysis ? EH.ui.drawer.analysis.summary : EH.ui.drawer.importError);
+check('Excel file read (deflate + shared strings)', an && an.ok === 2 && an.duplicate === 2 && an.error === 3, JSON.stringify(an));
+const impText = await page.textContent('.drawer');
+check('Preview flags duplicates (existing + in file)', /Déjà inscrit/.test(impText) && /Doublon de la ligne 4/.test(impText));
+check('Preview names the faulty field', /E-mail/.test(impText) && /Prénom/.test(impText) && /Secteur inconnu/.test(impText) && /date passée/.test(impText));
+const amel = await ev(() => EH.ui.drawer.analysis.rows[0].values);
+check('Excel date and sector normalised', amel.birth === '1998-03-14' && amel.sector === 'Tourisme', JSON.stringify(amel));
+await page.click('.drawer [data-action=cand-import]'); await page.waitForTimeout(100);
+check('Only valid rows inserted', (await ev(() => EH.store.data.entrepreneurs.length)) === before9 + 2);
+check('Import logged with counts', await ev(() => EH.store.data.audit.some((a) => a.action === 'Candidats importés' && /2 doublon/.test(a.detail) && /3 ligne/.test(a.detail))));
+const again = await ev(() => EH.act.analyzeImport(EH.sheet.readCsv('Prénom;Nom;Téléphone;Idée de projet\nAmel;Ben Youssef;+216 22 345 678;Maison\nNour;Saidi;+216 50 600 700;Savon artisanal')));
+check('Re-import (CSV) ignores rows already inserted', again.ok && again.summary.duplicate === 1 && again.summary.ok === 1, JSON.stringify(again.summary));
+const roundTrip = await ev(async () => { const blob = EH.sheet.writeXlsx([['Prénom', 'Nom', 'E-mail', 'Idée de projet'], ['Lina', 'Hamdi', 'lina@exemple.tn', 'Café']]); return EH.sheet.readXlsx(await blob.arrayBuffer()); });
+check('Template writer produces a readable .xlsx', roundTrip[1] && roundTrip[1][0] === 'Lina' && roundTrip[0][3] === 'Idée de projet');
+check('Missing column reported', /Colonnes obligatoires absentes/.test((await ev(() => EH.act.analyzeImport([['Nom', 'Téléphone'], ['X', '22 222 222']]))).errors._));
+await page.click('[data-action=new-candidate]'); await page.waitForTimeout(80);
+check('Manual tab still available', !!(await page.$('.drawer [name=firstName]')) && !!(await page.$('.drawer [data-action=cand-tab]')));
+await ev(() => EH.closeDrawer());
+
+/* ---------- 10. officer home: incubation (phases, exercises, funders) ---------- */
+await page.goto(URL + '#aujourdhui'); await page.waitForTimeout(120);
+check('Today page has the incubation section', /Incubation/.test(await page.textContent('#incubation')) && (await page.$$('#incubation .phase-card')).length === 3);
+await ev(() => { EH.ui.f['td.inc'] = 'bailleurs'; EH.render(); });
+const fund = await page.textContent('#incubation');
+check('Funders listed with their linked projects', /Fonds Régional d'Amorçage Sud/.test(fund) && /Amira Ben Salem/.test(fund) && /8\s000\s*DT/.test(fund));
+await page.click('#incubation [data-action=add-funding]'); await page.waitForTimeout(60);
+const target = await ev(() => EH.store.data.entrepreneurs.find((e) => e.centre === 'djerba' && e.stage === 'suivi').id);
+await page.selectOption('.modal [name=partner]', 'pa1'); await page.selectOption('.modal [name=entrepreneur]', target); await page.selectOption('.modal [name=kind]', 'Subvention'); await page.fill('.modal [name=amount]', '4000');
+await page.click('.modal button[type=submit]'); await page.waitForTimeout(80);
+check('Officer links a funder to a project', await ev((id) => EH.store.data.fundings.some((f) => f.entrepreneurId === id && f.amount === 4000), target));
+await ev(() => { EH.ui.f['td.inc'] = 'exercices'; EH.render(); });
+await page.click('#incubation .toolbar [data-action=give-exercise]'); await page.waitForTimeout(60);
+await page.fill('.drawer [name=title]', 'Tester le prix auprès de trois clients');
+await page.fill('.drawer [name=instructions]', 'Proposez deux prix et notez les réactions.');
+await page.check(`.drawer [name=entrepreneurs][value="${I.amiraEnt}"]`);
+await page.click('.drawer button[type=submit]'); await page.waitForTimeout(80);
+const exId = await ev(() => (EH.store.data.exercises.find((x) => x.title === 'Tester le prix auprès de trois clients') || {}).id);
+check('Officer gives an exercise', !!exId);
+await as(I.amira);
+check('Exercise becomes an action in Mon espace', /Tester le prix auprès de trois clients/.test(await page.textContent('#main')));
+const otherEx = await ev((me) => EH.store.data.exercises.find((x) => x.entrepreneurId !== me).id, I.amiraEnt);
+before = await deniedCount();
+await ev((id) => EH.openDrawer('myExercise', { id }), otherEx);
+check('Another beneficiary’s exercise is refused and logged', !(await page.$('.drawer')) && (await deniedCount()) === before + 1);
+await ev((id) => EH.actions['my-open-exercise']({ dataset: { id } }), exId); await page.waitForTimeout(60);
+await page.fill('.drawer [name=answer]', '25 DT accepté par 2 clients sur 3.');
+await page.click('.drawer button[type=submit]'); await page.waitForTimeout(80);
+check('Beneficiary hands the exercise in', (await ev((id) => EH.store.data.exercises.find((x) => x.id === id).status, exId)) === 'submitted');
+await as('u-djerba');
+check('Officer home lists the exercise to review', /Exercice rendu par Amira Ben Salem/.test(await page.textContent('#main')));
+await ev((id) => EH.openDrawer('exerciseView', { id }), exId);
+await page.click('.drawer [data-action=review-exercise]'); await page.waitForTimeout(80);
+check('Officer validates the exercise', (await ev((id) => EH.store.data.exercises.find((x) => x.id === id).status, exId)) === 'validated');
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(URL + '#aujourdhui'); await page.waitForTimeout(120);
+check('No horizontal scroll officer home @390', (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
+await page.setViewportSize({ width: 1440, height: 900 });
 
 check('No console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 

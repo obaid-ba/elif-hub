@@ -52,7 +52,7 @@
         ]
       }));
       const cols = [{ label: 'Entrepreneur' }, ...(pmo ? [{ label: 'Centre' }] : []), { label: 'Étape' }, { label: 'Dernière séance' }, { label: 'Prochaine action', cls: 'hide-md' }, { label: '', cls: 'actions' }];
-      const actions = canWrite ? C.btn('Saisir une séance', { action: 'new-session', icon: 'message' }) + C.btn('Inscrire un candidat', { action: 'new-candidate', icon: 'userPlus', variant: 'primary' }) : '';
+      const actions = canWrite ? C.btn('Saisir une séance', { action: 'new-session', icon: 'message' }) + C.btn('Importer (Excel)', { action: 'import-candidates', icon: 'file' }) + C.btn('Inscrire un candidat', { action: 'new-candidate', icon: 'userPlus', variant: 'primary' }) : '';
       return C.pageHead('Entrepreneurs', pmo ? 'Parcours des entrepreneurs des six centres, de la candidature à la sortie. Lecture seule : les centres saisissent.' : 'Votre cohorte, de la candidature à la sortie. Les entrepreneurs sans séance depuis 30 jours apparaissent en premier.', actions) +
         `<div class="toolbar">${C.search('ent.q', 'Rechercher un nom, un projet…', EH.f('ent.q', ''))}${pmo ? C.filterSelect('ent.centre', 'Centre', EH.centreOptions(), centre) : ''}<label class="check"><input type="checkbox" ${risk ? 'checked' : ''} ${C.on('filter', { key: 'ent.risk', value: risk ? '' : '1' })}> À risque <span class="muted num">(${riskCount})</span></label></div>` +
         `<div class="toolbar" style="overflow-x:auto">${seg}</div>` +
@@ -110,12 +110,44 @@
         <dt>Connu par</dt><dd>${esc(e.source || '—')}</dd></dl></div>
       <div class="section"><h3>Livrables <span class="muted num">${dels.length}</span></h3>${dels.length ? `<div class="panel">${dels.map((x) => { const late = x.status === 'expected' && x.due < EH.TODAY; return `<div class="list-row">${C.ico('file', late ? 'bad' : x.status === 'validated' ? 'ok' : '')}<div class="body"><div class="title">${esc(x.title)}</div><div class="meta ${late ? 't-bad' : ''}">${EH.stageLabel(x.stage)} · échéance ${EH.fmtDate(x.due)}${late ? ' · en retard' : ''}</div></div><div class="row-actions">${C.badge(DELIV[x.status][0], DELIV[x.status][1])}${w && x.status === 'expected' ? C.btn('Déposé', { action: 'set-deliverable', data: { id: x.id, status: 'submitted' }, size: 'sm' }) : ''}${w && x.status === 'submitted' ? C.btn('Valider', { action: 'set-deliverable', data: { id: x.id, status: 'validated' }, size: 'sm' }) : ''}</div></div>`; }).join('')}</div>` : '<p class="muted small">Aucun livrable pour cette étape.</p>'}</div>
       ${S.isBeneficiary() ? '' : reportsBlock(d, e)}
+      ${S.isBeneficiary() || !EH.entIncubationBlocks ? '' : EH.entIncubationBlocks(d, e)}
       <div class="section"><h3>Chronologie</h3>${tl.length ? `<ul class="timeline">${tl.map((t) => `<li>${C.ico(t.icon, t.tone)}<div><div class="what">${esc(t.what)}</div><div class="when">${EH.fmtDateY(t.date)}${t.sub ? ' · ' + esc(t.sub) : ''}</div></div></li>`).join('')}</ul>` : '<p class="muted small">Rien à afficher.</p>'}</div>`;
     return C.drawer({ title: esc(e.name), sub: `${C.stageBadge(e.stage)} ${risk ? C.badge('À risque', 'bad', 'alert') : ''} · ${esc(Q.centreName(d, e.centre))}`, tools, body, wide: true });
   };
 
   /* ---------- registration (US-08, US-09) ---------- */
+  const candTabs = (tab) => `<div class="seg cand-tabs" role="tablist" aria-label="Mode d'inscription">${[['manual', 'Saisie manuelle', 'edit'], ['import', 'Importer un fichier Excel', 'file']].map(([id, l, ic]) => `<button type="button" role="tab" aria-selected="${tab === id}" aria-pressed="${tab === id}" ${C.on('cand-tab', { tab: id })}>${I(ic)} ${l}</button>`).join('')}</div>`;
+
+  /** Import tab: choose a file, see one verdict per row, then insert the valid ones. */
+  const importBody = (st) => {
+    const an = st.analysis, cols = EH.act.IMPORT_COLUMNS;
+    const intro = `<div class="callout info">${I('info')}<div>Colonnes attendues (ligne 1) : <b>Prénom*</b>, <b>Nom*</b>, Téléphone, E-mail, Date de naissance, Secteur, <b>Idée de projet*</b>, Source. Téléphone ou e-mail obligatoire. Formats acceptés : .xlsx et .csv.
+      <div class="actions">${C.btn('Télécharger le modèle Excel', { action: 'cand-template', icon: 'file', size: 'sm' })}</div></div></div>`;
+    const picker = `<div class="field full"><label for="import-file">Fichier des candidats</label><input id="import-file" class="input file-input" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" data-live="importFile">${st.fileName ? `<span class="help">Fichier lu : ${esc(st.fileName)}</span>` : ''}</div>`;
+    const err = st.importError ? C.callout('bad', esc(st.importError)) : '';
+    if (!an) return `${intro}${picker}${err}`;
+    const S2 = an.summary, filter = st.importFilter || '';
+    const badge = { ok: C.badge('À insérer', 'ok', 'check'), duplicate: C.badge('Ignoré · doublon', 'warn', 'copy'), error: C.badge('Erreur', 'bad', 'alert') };
+    const rows = an.rows.filter((x) => !filter || x.status === filter).map((x) => ({ cls: 'imp-' + x.status, cells: [
+      `<span class="num muted">${x.line}</span>`,
+      `<span class="strong">${esc((x.values.firstName + ' ' + x.values.lastName).trim() || '—')}</span><span class="sub truncate" style="max-width:240px">${esc(x.values.idea || '')}</span>`,
+      badge[x.status],
+      x.status === 'error' ? `<ul class="imp-errors">${Object.entries(x.errors).map(([k, m]) => `<li><b>${esc(cols[k] || k)}</b> : ${esc(m)}</li>`).join('')}</ul>` : x.status === 'duplicate' ? `<span class="small">${esc(x.reason)}</span>` : `<span class="small muted">${esc([x.values.phone, x.values.email].filter(Boolean).join(' · '))}</span>`
+    ] }));
+    const seg = C.seg('imp', [{ value: '', label: 'Toutes', count: an.rows.length }, { value: 'ok', label: 'À insérer', count: S2.ok }, { value: 'duplicate', label: 'Doublons ignorés', count: S2.duplicate }, { value: 'error', label: 'Erreurs', count: S2.error }], filter, 'Filtrer les lignes').replace(/data-action="filter"/g, 'data-action="imp-filter"');
+    return `${intro}${picker}${err}
+      <div class="imp-summary"><div class="imp-stat ok"><b class="num">${S2.ok}</b><span>à insérer</span></div><div class="imp-stat warn"><b class="num">${S2.duplicate}</b><span>doublons ignorés</span></div><div class="imp-stat bad"><b class="num">${S2.error}</b><span>en erreur</span></div></div>
+      ${S2.error ? C.callout('warn', 'Les lignes en erreur ne seront pas insérées. Corrigez-les dans le fichier puis importez-le à nouveau : les candidats déjà insérés seront alors reconnus comme doublons et ignorés.') : ''}
+      <div class="toolbar" style="overflow-x:auto">${seg}</div>
+      <div class="panel">${C.table({ caption: 'Aperçu de l’import', cols: [{ label: 'Ligne', cls: 'num' }, { label: 'Candidat' }, { label: 'Statut' }, { label: 'Détail' }], rows, empty: C.empty({ icon: 'search', tone: '', title: 'Aucune ligne pour ce filtre' }) })}</div>`;
+  };
+
   EH.drawers.candidate = (st) => {
+    if (st.tab === 'import') {
+      const n = st.analysis ? st.analysis.summary.ok : 0;
+      return C.drawer({ title: 'Inscrire des candidats', sub: `Centre de ${esc(Q.centreName(S.data, S.scope()))} · statut Candidat`, tools: candTabs('import'), wide: true, body: importBody(st),
+        foot: C.btn('Annuler', { action: 'close-drawer' }) + C.btn(n ? `Insérer ${EH.plural(n, 'candidat')}` : 'Insérer', { action: 'cand-import', variant: 'primary', icon: 'userPlus', disabled: !n }) });
+    }
     const v = st.values, er = st.errors;
     const dup = st.duplicates ? C.callout('warn', `<b>Doublon possible.</b><ul style="margin:6px 0 0;padding-left:18px">${st.duplicates.map((x) => x.own ? `<li>${esc(x.name)} · ${EH.stageLabel(x.stage)} — <button type="button" class="link-btn" ${C.on('open-ent', { id: x.id })}>ouvrir la fiche</button></li>` : `<li>Une personne avec ces coordonnées existe déjà au centre de ${esc(x.centre)}.</li>`).join('')}</ul>`) +
       C.field({ name: 'overrideReason', label: 'Motif pour enregistrer quand même', type: 'textarea', rows: 2, required: true, error: er.override, value: v.overrideReason, help: 'Ce motif est enregistré dans le journal.' }) : '';
@@ -129,7 +161,7 @@
       ${C.field({ name: 'idea', label: 'Idée de projet', type: 'textarea', rows: 2, required: true, value: v.idea, error: er.idea, full: true })}
       ${C.field({ name: 'source', label: "Comment a-t-il connu ELIFE ?", type: 'select', value: v.source, options: ['', ...R.sources], full: true })}
     </div>`;
-    return C.drawer({ title: 'Inscrire un candidat', sub: `Centre de ${esc(Q.centreName(S.data, S.scope()))} · statut Candidat`, form: 'candidate', draft: true, body, foot: C.btn('Annuler', { action: 'close-drawer' }) + C.btn(st.duplicates ? 'Enregistrer quand même' : 'Enregistrer', { type: 'submit', variant: 'primary' }) });
+    return C.drawer({ title: 'Inscrire un candidat', sub: `Centre de ${esc(Q.centreName(S.data, S.scope()))} · statut Candidat`, tools: candTabs('manual'), form: 'candidate', draft: true, body, foot: C.btn('Annuler', { action: 'close-drawer' }) + C.btn(st.duplicates ? 'Enregistrer quand même' : 'Enregistrer', { type: 'submit', variant: 'primary' }) });
   };
   EH.forms.candidate = (v) => {
     const st = EH.ui.drawer;
@@ -140,6 +172,20 @@
       drafts.clear('candidate'); EH.closeDrawer(); EH.render();
       EH.toast(`${esc(r.item.name)} est inscrit comme candidat.`, { label: 'Décision de sélection', action: () => EH.openModal('selection', { id: r.item.id }) });
     });
+  };
+
+  /** File chosen in the import tab: read it, then analyse every row (nothing is written yet). */
+  EH.live.importFile = async (el) => {
+    const st = EH.ui.drawer, file = el.files && el.files[0];
+    if (!st || !file || st.readingFile === file) return;
+    st.readingFile = file;
+    st.fileName = file.name; st.importError = null; st.analysis = null; st.rawRows = null; st.importFilter = '';
+    try {
+      const rows = await EH.sheet.readFile(file);
+      const an = EH.act.analyzeImport(rows);
+      if (an.ok) { st.analysis = an; st.rawRows = rows; } else st.importError = an.errors._;
+    } catch (e) { st.importError = e && e.message ? e.message : 'Impossible de lire ce fichier.'; }
+    if (EH.ui.drawer === st) EH.renderOverlays();
   };
 
   /* ---------- session (US-12): six fields ---------- */
@@ -221,7 +267,25 @@
 
   Object.assign(EH.actions, {
     'open-ent': (el) => { const e = Q.ent(S.data, el.dataset.id); if (e && !S.isBeneficiary() && !S.canSeeEnt(e)) EH.act.guardEnt(e); EH.openDrawer('ent', { id: el.dataset.id }); },
-    'new-candidate': () => { if (!S.isOfficer()) return; const dr = drafts.get('candidate'); EH.openDrawer('candidate', { values: dr || {} }); },
+    'new-candidate': (el) => { if (!S.isOfficer()) return; const dr = drafts.get('candidate'); EH.openDrawer('candidate', { values: dr || {}, tab: el && el.dataset && el.dataset.tab === 'import' ? 'import' : 'manual' }); },
+    'import-candidates': () => { if (!S.isOfficer()) return; EH.openDrawer('candidate', { values: {}, tab: 'import' }); },
+    'cand-tab': (el) => { const st = EH.ui.drawer; if (!st || st.type !== 'candidate') return; st.tab = el.dataset.tab; st.errors = {}; EH.renderOverlays(true); },
+    'imp-filter': (el) => { const st = EH.ui.drawer; if (!st) return; st.importFilter = el.dataset.value; EH.renderOverlays(); },
+    'cand-template': () => {
+      const cols = Object.values(EH.act.IMPORT_COLUMNS);
+      const rows = [cols, ['Amel', 'Ben Youssef', '+216 22 345 678', 'amel.benyoussef@exemple.tn', '14/03/1998', 'Tourisme', "Maison d'hôtes à Houmt Souk", 'Réseaux sociaux']];
+      EH.sheet.download(EH.sheet.writeXlsx(rows, 'Candidats'), 'modele-candidats-elife.xlsx');
+      EH.toast('Modèle téléchargé : remplissez une ligne par candidat sous les en-têtes.');
+    },
+    'cand-import': () => {
+      const st = EH.ui.drawer;
+      if (!st || !st.rawRows) return;
+      const res = EH.act.importCandidates(st.rawRows);
+      if (!res.ok) { st.importError = res.errors._; EH.renderOverlays(); return; }
+      EH.closeDrawer(); EH.render();
+      const sm = res.summary;
+      EH.toast(`${EH.plural(res.items.length, 'candidat inséré', 'candidats insérés')}${sm.duplicate ? ` · ${EH.plural(sm.duplicate, 'doublon ignoré', 'doublons ignorés')}` : ''}${sm.error ? ` · ${EH.plural(sm.error, 'ligne en erreur', 'lignes en erreur')} non insérée${sm.error > 1 ? 's' : ''}` : ''}.`, { tone: sm.error ? 'error' : 'ok' });
+    },
     'new-session': (el) => {
       if (!S.isOfficer()) return;
       const id = el && el.dataset && el.dataset.id;

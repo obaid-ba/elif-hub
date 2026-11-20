@@ -31,6 +31,18 @@
       if (subm) items.push({ kind: 'benef', sev: 'warn', icon: 'report', title: `${EH.plural(subm, 'rapport bénéficiaire', 'rapports bénéficiaires')} à valider · « ${a.title} »`, meta: `${EH.fmtDay(a.date)} · relisez puis validez ou renvoyez`, btn: ['Examiner', 'open-activity', { id: a.id }] });
       obs.filter((o) => o.late).forEach((o) => items.push({ kind: 'benef', sev: 'bad', icon: 'report', title: `${o.entrepreneur.name} : rapport en retard · « ${a.title} »`, meta: `À rendre le ${EH.fmtDate(o.due)} · ${o.daysLate} j de retard`, btn: ['Ouvrir', 'open-activity', { id: a.id }] }));
     });
+    (d.exercises || []).filter((x) => x.centre === c && x.status === 'submitted').forEach((x) => {
+      const e = Q.ent(d, x.entrepreneurId);
+      items.push({ kind: 'incub', sev: 'warn', icon: 'edit', title: `Exercice rendu par ${e.name} : « ${x.title} »`, meta: `Rendu le ${EH.fmtDate(x.submittedAt.slice(0, 10))} · validez ou demandez de reprendre`, btn: ['Examiner', 'open-exercise', { id: x.id }] });
+    });
+    (d.exercises || []).filter((x) => x.centre === c && Q.exerciseLate(x)).forEach((x) => {
+      const e = Q.ent(d, x.entrepreneurId);
+      items.push({ kind: 'incub', sev: 'info', icon: 'edit', title: `${e.name} : exercice en retard « ${x.title} »`, meta: `Échéance ${EH.fmtDate(x.due)} · ${EH.ago(x.due)} j de retard${e.portal ? '' : ' · espace non activé'}`, btn: ['Ouvrir', 'open-exercise', { id: x.id }] });
+    });
+    d.entrepreneurs.filter((e) => e.centre === c && R.activeStages.includes(e.stage)).forEach((e) => {
+      const p = Q.phaseProgress(e);
+      if (p.over && p.days - p.target <= 21) items.push({ kind: 'incub', sev: 'info', icon: 'clock', title: `${e.name} : ${EH.stageLabel(e.stage).toLowerCase()} au-delà de la durée prévue`, meta: `${p.days} jours sur ${p.target} prévus · faites le point sur le passage à l'étape suivante`, btn: ['Changer d’étape', 'change-stage', { id: e.id }] });
+    });
     const rank = { bad: 0, warn: 1, info: 2 };
     return items.sort((a, b) => rank[a.sev] - rank[b.sev]);
   };
@@ -40,7 +52,7 @@
     render() {
       const d = S.data, c = S.scope(), u = S.user();
       const all = EH.todayItems(), kind = EH.f('td.kind', '');
-      const benefN = all.filter((x) => x.kind === 'benef').length;
+      const benefN = all.filter((x) => x.kind === 'benef').length, incubN = all.filter((x) => x.kind === 'incub').length;
       const items = kind ? all.filter((x) => x.kind === kind) : all;
       const k = Q.kpis(d, c, Q.currentPeriod());
       const n = (v) => (v == null ? 'Pas de donnée' : Math.round(v) + EH.NBSP + '%');
@@ -51,12 +63,13 @@
       const more = items.length > LIMIT ? C.btn(showAll ? 'Réduire' : `Afficher les ${items.length - LIMIT} autres`, { action: 'filter', data: { key: 'td.all', value: showAll ? '' : '1' }, variant: 'ghost', size: 'sm' }) : '';
       return C.pageHead(`Bonjour ${esc(u.name.split(' ')[0])}`, `${EH.fmtDay(EH.TODAY)} · ${all.length ? EH.plural(all.length, 'point') + ' à traiter' : 'tout est à jour'}. Raccourcis clavier : S séance, C candidat, A activité.`,
         C.btn('Inscrire un candidat', { action: 'new-candidate', icon: 'userPlus' }) + C.btn('Saisir une séance', { action: 'new-session', icon: 'message', variant: 'primary' })) +
-        `<div class="grid-2">${C.panel({ title: "À faire aujourd'hui", count: all.length, actions: benefN ? C.seg('td.kind', [{ value: '', label: 'Tout', count: all.length }, { value: 'benef', label: 'Rapports bénéficiaires', count: benefN }], kind, 'Filtrer les points') : '', body: todo, foot: more })}
+        `<div class="grid-2">${C.panel({ title: "À faire aujourd'hui", count: all.length, actions: benefN || incubN ? C.seg('td.kind', [{ value: '', label: 'Tout', count: all.length }, ...(benefN ? [{ value: 'benef', label: 'Rapports', count: benefN }] : []), ...(incubN ? [{ value: 'incub', label: 'Incubation', count: incubN }] : [])], kind, 'Filtrer les points') : '', body: todo, foot: more })}
         <div class="stack">
           ${C.panel({ title: 'Mon centre ce mois-ci', actions: C.badge('Provisoire', 'outline'), flush: false, body: `<dl class="dl"><dt>Entrepreneurs actifs</dt><dd class="num">${k.active ?? 'Pas de donnée'}</dd><dt>Couverture coaching</dt><dd class="num">${n(k.coverage)}</dd><dt>Exécution des activités</dt><dd class="num">${n(k.execution)}</dd><dt>Séances tenues</dt><dd class="num">${k.sessions}</dd><dt>Remise des rapports${C.info(EH.REF.kpis.reporting.formula)}</dt><dd class="num">${n(k.reporting)}</dd><dt>Engagement des bénéficiaires${C.info(EH.REF.kpis.engagement.formula)}</dt><dd class="num">${n(k.engagement)}</dd></dl><p class="muted xs" style="margin-top:8px">Ce sont les chiffres que voit le PMO. Ils deviennent officiels quand votre rapport est validé.</p>` })}
           ${C.panel({ title: 'Prochaines activités', count: upcoming.length, body: upcoming.length ? upcoming.map((a) => `<div class="list-row">${C.ico('calendar', a.facilitator ? 'info' : 'warn')}<div class="body">${EH.activityLink(a)}<div class="meta">${EH.fmtDay(a.date)} · ${esc(EH.partnerName(a.facilitator) || 'Intervenant à définir')}</div></div></div>`).join('') : C.empty({ icon: 'calendar', tone: '', title: 'Rien de prévu sous 14 jours', action: C.btn('Planifier une activité', { action: 'new-activity', icon: 'plus' }) }) })}
           ${lessons.length ? C.panel({ title: 'Appris dans les autres centres', body: lessons.map((x) => `<div class="list-row">${C.ico('book', 'accent')}<div class="body"><button class="link-btn" ${C.on('open-knowledge', { id: x.id })}>${esc(x.title)}</button><div class="meta">${esc(Q.centreName(d, x.centre))} · ${esc(x.type)}</div></div></div>`).join('') }) : ''}
-        </div></div>`;
+        </div></div>
+        <div style="margin-top:var(--s-4)">${EH.incubationPanel ? EH.incubationPanel() : ''}</div>`;
     }
   };
 })();

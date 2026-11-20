@@ -28,8 +28,13 @@
   C.empty = ({ icon = 'checkCircle', tone = 'ok', title, text = '', action = '' }) =>
     `<div class="empty">${C.ico(icon, tone)}<h3>${esc(title)}</h3>${text ? `<p>${text}</p>` : ''}${action}</div>`;
 
-  C.kpi = ({ label, value, sub = '', info }) =>
-    `<div class="kpi"><div class="kpi-label">${esc(label)}${info ? C.info(info) : ''}</div>${value == null ? '<div class="kpi-value nodata">Pas de donnée</div>' : `<div class="kpi-value num">${value}</div>`}<div class="kpi-sub">${sub}</div></div>`;
+  /** Rate tone: 'ok' | 'warn' | 'bad' ('' when no data). invert = lower is better (abandon). */
+  C.rateTone = (v, invert) => (v == null ? '' : invert ? (v <= 10 ? 'ok' : v <= 20 ? 'warn' : 'bad') : (v >= 80 ? 'ok' : v >= 60 ? 'warn' : 'bad'));
+  /** Thin horizontal meter for a percentage. */
+  C.meter = (v, invert) => (v == null ? '' : `<span class="meter" aria-hidden="true"><span class="fill ${C.rateTone(v, invert)}" style="width:${Math.max(2, Math.min(100, v))}%"></span></span>`);
+
+  C.kpi = ({ label, value, sub = '', info, meter, invert }) =>
+    `<div class="kpi"><div class="kpi-label">${esc(label)}${info ? C.info(info) : ''}</div>${value == null ? '<div class="kpi-value nodata">Pas de donnée</div>' : `<div class="kpi-value num">${value}</div>${meter != null ? C.meter(meter, invert) : ''}`}<div class="kpi-sub">${sub}</div></div>`;
 
   /** cols: [{label, cls}] ; rows: [{cells:[html], attrs, cls}] */
   C.table = ({ cols, rows, empty, caption }) =>

@@ -35,13 +35,13 @@
     const n = (v) => (v == null ? null : Math.round(v) + EH.NBSP + '%');
     const cells = [
       C.kpi({ label: R.active.label, value: k.active, sub: `${k.byStage.preinc} pré-inc. · ${k.byStage.incub} incub. · ${k.byStage.suivi} suivi`, info: R.active.formula }),
-      C.kpi({ label: 'Exécution', value: n(k.execution), sub: k.execution == null ? 'Aucune activité sur la période' : `${k.executionDetail.done} réalisées sur ${k.executionDetail.done + k.executionDetail.open + k.executionDetail.cancelled} · ${prov}`, info: R.execution.formula }),
-      C.kpi({ label: 'Couverture coaching', value: n(k.coverage), sub: k.coverage == null ? '' : `${k.coverageDetail.covered} sur ${k.coverageDetail.active} actifs · ${prov}`, info: R.coverage.formula }),
-      C.kpi({ label: 'Abandon', value: n(k.abandon), sub: k.abandon == null ? 'Personne entré en incubation' : `${k.byStage.abandon} abandon${k.byStage.abandon > 1 ? 's' : ''} · ${prov}`, info: R.abandon.formula }),
+      C.kpi({ label: 'Exécution', value: n(k.execution), meter: k.execution, sub: k.execution == null ? 'Aucune activité sur la période' : `${k.executionDetail.done} réalisées sur ${k.executionDetail.done + k.executionDetail.open + k.executionDetail.cancelled} · ${prov}`, info: R.execution.formula }),
+      C.kpi({ label: 'Couverture coaching', value: n(k.coverage), meter: k.coverage, sub: k.coverage == null ? '' : `${k.coverageDetail.covered} sur ${k.coverageDetail.active} actifs · ${prov}`, info: R.coverage.formula }),
+      C.kpi({ label: 'Abandon', value: n(k.abandon), meter: k.abandon, invert: true, sub: k.abandon == null ? 'Personne entré en incubation' : `${k.byStage.abandon} abandon${k.byStage.abandon > 1 ? 's' : ''} · ${prov}`, info: R.abandon.formula }),
       C.kpi({ label: 'Séances', value: k.sessions, sub: prov, info: R.sessions.formula }),
       C.kpi({ label: R.partners.label, value: k.partners, sub: 'Sur 6 mois glissants', info: R.partners.formula }),
-      C.kpi({ label: R.reporting.label, value: n(k.reporting), sub: k.reporting == null ? 'Aucun rapport dû sur la période' : `${k.reportingDetail.onTime} remis à temps sur ${k.reportingDetail.due} · ${prov}`, info: R.reporting.formula }),
-      C.kpi({ label: R.engagement.label, value: n(k.engagement), sub: k.engagement == null ? 'Aucune donnée sur la période' : `${k.engagementDetail.num} sur ${k.engagementDetail.den} · ${prov}`, info: R.engagement.formula })
+      C.kpi({ label: R.reporting.label, value: n(k.reporting), meter: k.reporting, sub: k.reporting == null ? 'Aucun rapport dû sur la période' : `${k.reportingDetail.onTime} remis à temps sur ${k.reportingDetail.due} · ${prov}`, info: R.reporting.formula }),
+      C.kpi({ label: R.engagement.label, value: n(k.engagement), meter: k.engagement, sub: k.engagement == null ? 'Aucune donnée sur la période' : `${k.engagementDetail.num} sur ${k.engagementDetail.den} · ${prov}`, info: R.engagement.formula })
     ];
     return `<div class="panel kpis ${compact ? 'compact' : ''}">${cells.join('')}</div>`;
   };

@@ -13,10 +13,12 @@
     abandon: { id: 'abandon', label: 'Abandon' },
     activeStages: ['preinc', 'incub', 'suivi'],
     programmeTypes: ['Cohorte d\'incubation', 'Bootcamp', 'Formation', 'Événement', 'Hackathon', 'Sensibilisation', 'Networking', 'Programme financé par un partenaire'],
-    activityTypes: ['Atelier', 'Formation', 'Coaching collectif', 'Mentorat collectif', 'Événement', 'Visite', 'Jury'],
+    activityTypes: ['Atelier', 'Atelier en ligne', 'Formation', 'Session 1-1', 'Coaching collectif', 'Mentorat collectif', 'Événement', 'Visite', 'Jury'],
+    equipment: ['Vidéoprojecteur', 'Écran', 'Sonorisation', 'Paperboard', 'Ordinateurs', 'Connexion internet'],
     activityStatus: {
-      draft: { label: 'Brouillon', tone: 'warn', icon: 'edit' },
+      draft: { label: 'Intervenant à trouver', tone: 'warn', icon: 'edit' },
       planned: { label: 'Prévue', tone: 'info', icon: 'calendar' },
+      confirmed: { label: 'Confirmée', tone: 'accent', icon: 'check' },
       overdue: { label: 'À clôturer', tone: 'bad', icon: 'alert' },
       done: { label: 'Réalisée', tone: 'ok', icon: 'checkCircle' },
       postponed: { label: 'Reportée', tone: 'warn', icon: 'clock' },
@@ -73,6 +75,15 @@
       reporting: { label: 'Remise des rapports', formula: 'Rapports bénéficiaires obligatoires remis à temps (premier envoi avant l’échéance) ÷ rapports dus, pour les activités de la période. Un rapport est dû quand son échéance est passée ou qu’il a été remis.' },
       engagement: { label: 'Engagement des bénéficiaires', formula: '(Présences aux activités réalisées + rapports remis à temps) ÷ (activités réalisées attendues + rapports dus), cumulés sur les bénéficiaires dont l’espace est activé.' }
     },
+    /** Incubation follow-up: expected length of each phase, in days (alert when exceeded). */
+    phaseTargets: { preinc: 90, incub: 180, suivi: 90 },
+    exerciseStatus: {
+      todo: { label: 'À faire', tone: 'info', icon: 'edit' },
+      submitted: { label: 'Rendu', tone: 'accent', icon: 'send' },
+      returned: { label: 'À reprendre', tone: 'warn', icon: 'undo' },
+      validated: { label: 'Validé', tone: 'ok', icon: 'checkCircle' }
+    },
+    fundingKinds: ['Subvention', "Prêt d'honneur", 'Prix / concours', 'Prise de participation', 'Matériel / en nature'],
     INACTIVE_MONTHS: 6,
     RISK_DAYS: 30,
     OVERDUE_GRACE: 2
