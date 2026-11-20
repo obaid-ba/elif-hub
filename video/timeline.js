@@ -402,7 +402,7 @@
   const DURATION = 121.5; // scenario length (seconds, v2 timing)
 
   /* ---------- v3 pitch: what is shown, and the slow-motion time warp ---------- */
-  const SHOW = { captions: false, banners: false, cards: true };
+  const SHOW = { captions: false, banners: false, cards: false };
   const SECTION_SECONDS = 40; // each défi (section card + workflow demo) lasts this long in the video
   /** [scenario start, scenario end, video length] — the opening and the ending keep their real speed. */
   const WARP = [[0, 7.0, 7.0], [7.0, 37.0, SECTION_SECONDS], [37.0, 66.2, SECTION_SECONDS], [66.2, 90.0, SECTION_SECONDS], [90.0, 111.2, SECTION_SECONDS], [111.2, DURATION, DURATION - 111.2]];

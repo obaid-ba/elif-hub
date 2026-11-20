@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Rapport au jury — ELIFE Hub</title>
+<style>
+:root{
+  --bg:#F7F7F5;--panel:#FFFFFF;--sunken:#F2F1EE;--line:#E6E4E0;--line-strong:#D3D0CB;
+  --ink:#1C1B1A;--ink-2:#4F4B46;--ink-3:#69645E;
+  --accent:#5645D4;--accent-press:#3A2A99;--accent-soft:#EEEBFB;--accent-ink:#3A2A99;
+  --teal:#2A9D99;--navy:#0A1530;
+  --ok:#15803D;--ok-bg:#E7F4EB;--warn:#A34A06;--warn-bg:#FCF1E1;--info:#1D4ED8;--info-bg:#E9EFFC;
+  --stage-1:#CFCBF4;--stage-2:#A99FEA;--stage-3:#7B6BDF;--stage-4:#5645D4;--stage-5:#2E2470;
+  --font:Inter,-apple-system,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@page{size:A4;margin:22mm 18mm 20mm}
+@page :first{margin:0}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:400 10pt/1.55 var(--font);color:var(--ink);background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-feature-settings:"cv11","ss01"}
+h1,h2,h3,p{margin:0}
+b,strong{font-weight:600}
+
+/* ---------- cover ---------- */
+.cover{width:210mm;height:297mm;position:relative;overflow:hidden;background:var(--bg);page-break-after:always;display:flex;flex-direction:column;padding:22mm 20mm 18mm}
+.cover .rings{position:absolute;right:-70mm;top:40mm;width:200mm;height:200mm;opacity:.95}
+.cover .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15pt}
+.cover .brand .sub{color:var(--ink-3);font-weight:500}
+.cover .event{margin-left:auto;font-size:9pt;color:var(--ink-3);font-weight:500;border:1px solid var(--line-strong);border-radius:999px;padding:4px 12px;background:var(--panel)}
+.cover .mid{margin-top:58mm;position:relative;max-width:120mm}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-size:8.5pt;font-weight:600;letter-spacing:.2px}
+.cover h1{font-size:34pt;line-height:1.08;letter-spacing:-.8px;font-weight:700;margin-top:14px}
+.cover h1 .hl{color:var(--accent)}
+.cover .lead{font-size:12.5pt;color:var(--ink-2);margin-top:14px;line-height:1.45}
+.cover .defis{display:flex;gap:8px;margin-top:22px;flex-wrap:wrap}
+.cover .defis span{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:9pt;font-weight:500;box-shadow:0 1px 2px rgba(28,27,26,.05)}
+.cover .defis i{font-style:normal;display:grid;place-items:center;width:20px;height:20px;border-radius:5px;background:var(--accent);color:#fff;font-size:8.5pt;font-weight:700}
+.cover .meta{margin-top:auto;position:relative;display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(28,27,26,.05)}
+.cover .meta div{padding:12px 16px;border-left:1px solid var(--line)}
+.cover .meta div:first-child{border-left:0}
+.cover .meta .k{font-size:7.5pt;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);font-weight:600}
+.cover .meta .v{font-size:10pt;font-weight:600;margin-top:3px}
+.cover .band{position:absolute;left:0;right:0;bottom:0;height:5mm;background:linear-gradient(90deg,var(--stage-1),var(--stage-3) 45%,var(--accent) 70%,var(--stage-5))}
+
+/* ---------- body ---------- */
+main{counter-reset:sec}
+section{margin-bottom:9mm}
+section.break{page-break-before:always}
+h2{counter-increment:sec;font-size:16pt;font-weight:700;letter-spacing:-.3px;line-height:1.25;display:flex;align-items:baseline;gap:10px;padding-bottom:7px;margin-bottom:10px;border-bottom:1px solid var(--line);page-break-after:avoid}
+h2::before{content:counter(sec,decimal-leading-zero);font-size:10pt;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+h2 .tag{margin-left:auto;white-space:nowrap;flex:none;font-size:8pt;font-weight:600;color:var(--accent-ink);background:var(--accent-soft);border-radius:999px;padding:3px 9px;letter-spacing:.2px}
+h3{font-size:10.5pt;font-weight:600;margin:12px 0 6px;page-break-after:avoid}
+p{margin:0 0 8px}
+.intro{font-size:11pt;color:var(--ink-2);line-height:1.5;margin-bottom:10px}
+ul,ol{margin:0 0 8px;padding-left:18px}
+li{margin:3px 0}
+li::marker{color:var(--accent);font-weight:600}
+
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:8.8pt;line-height:1.45;margin:4px 0 10px;border:1px solid var(--line);border-radius:8px;page-break-inside:auto}
+thead{display:table-header-group}
+tr{page-break-inside:avoid}
+th:first-child{border-top-left-radius:8px}th:last-child{border-top-right-radius:8px}
+th{background:var(--sunken);color:var(--ink-2);font-weight:600;text-align:left;font-size:8pt;text-transform:uppercase;letter-spacing:.4px;padding:7px 10px;border-bottom:1px solid var(--line)}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:500}
+.pbi{display:inline-block;font-size:7.5pt;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:4px;padding:1px 6px;margin-right:4px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.star{color:var(--accent)}
+.d{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:5px;background:var(--accent);color:#fff;font-weight:700;font-size:8pt}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.callout{display:flex;gap:10px;background:var(--ok-bg);border:1px solid #C6E5CF;border-radius:8px;padding:9px 12px;margin:8px 0 4px;page-break-inside:avoid}
+.callout .k{flex:none;font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ok);padding-top:2px}
+.callout p{margin:0}
+.note{background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:9px 12px;margin:8px 0;page-break-inside:avoid}
+
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:6px 0 12px;page-break-inside:avoid}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 10px;position:relative}
+.step .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;color:#fff;font-size:8pt;font-weight:700}
+.step:nth-child(1) .n{background:var(--stage-2)}.step:nth-child(2) .n{background:var(--stage-3)}.step:nth-child(3) .n{background:var(--stage-4)}.step:nth-child(4) .n{background:#3F31A8}.step:nth-child(5) .n{background:var(--stage-5)}
+.step h4{margin:6px 0 3px;font-size:9.5pt;font-weight:600}
+.step p{font-size:8pt;color:var(--ink-2);line-height:1.4;margin:0}
+
+.roles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 4px}
+.role{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.role .k{font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent)}
+.role p{margin:4px 0 0;font-size:9pt;color:var(--ink-2)}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 12px;page-break-inside:avoid}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel)}
+.kpi .v{font-size:18pt;font-weight:700;letter-spacing:-.5px;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .l{font-size:8pt;color:var(--ink-3);margin-top:3px}
+
+.flow{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:2px 0 10px}
+.flow span{font-size:8.5pt;font-weight:500;background:var(--sunken);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.flow em{font-style:normal;color:var(--ink-3)}
+
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:6px 0;page-break-inside:avoid}
+.road div{border-top:3px solid var(--accent);background:var(--panel);border-radius:0 0 8px 8px;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 11px}
+.road div:nth-child(1){border-top-color:var(--stage-2)}.road div:nth-child(2){border-top-color:var(--stage-3)}.road div:nth-child(3){border-top-color:var(--stage-4)}.road div:nth-child(4){border-top-color:var(--stage-5)}
+.road .k{font-size:7.5pt;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px}
+.road h4{margin:3px 0;font-size:9.5pt;font-weight:600}
+.road p{margin:0;font-size:8.3pt;color:var(--ink-2);line-height:1.4}
+.ph{color:var(--ink-3);font-style:italic}
+.end{margin-top:12mm;text-align:center;color:var(--ink-3);font-size:9pt;display:flex;flex-direction:column;align-items:center;gap:8px}
+</style>
+</head>
+<body>
+
+<!-- ======================= PAGE DE GARDE ======================= -->
+<div class="cover">
+  <svg class="rings" viewBox="0 0 100 100" aria-hidden="true" id="bigLogo"></svg>
+  <div style="display:flex;align-items:center;position:relative">
+    <div class="brand"><svg width="30" height="30" viewBox="0 0 100 100" aria-hidden="true" class="logo"></svg><span>ELIFE <span class="sub">Hub</span></span></div>
+    <span class="event">ELIFE NextGen Fest 2026 · Hackathon</span>
+  </div>
+
+  <div class="mid">
+    <span class="chip">Rapport au jury</span>
+    <h1>Une plateforme pensée pour le <span class="hl">chargé d’incubation</span></h1>
+    <p class="lead">Approche centrée utilisateur : les user stories des défis 1, 2, 4 et 8, traduites en solutions concrètes aux points de douleur du terrain.</p>
+    <div class="defis">
+      <span><i>1</i>Programmes et activités</span>
+      <span><i>2</i>Parcours de l’entrepreneur</span>
+      <span><i>4</i>Centralisation et reporting</span>
+      <span><i>8</i>Pilotage et décision</span>
+    </div>
+  </div>
+
+  <div class="meta">
+    <div><p class="k">Équipe</p><p class="v">[Nom de l’équipe]</p></div>
+    <div><p class="k">Date</p><p class="v">20 novembre 2026</p></div>
+    <div><p class="k">Livrable</p><p class="v">Prototype fonctionnel</p></div>
+  </div>
+  <div class="band"></div>
+</div>
+
+<main>
+
+<!-- 01 -->
+<section>
+<h2>Résumé</h2>
+<p class="intro">ELIFE Hub est une plateforme unique pour les six centres, le PMO et les bénéficiaires, conçue autour du <b>chargé d’incubation</b>. Chaque fonction répond à une user story du backlog client et à un point de douleur qu’il nous a décrit.</p>
+<p>Plutôt que de survoler les huit défis, nous avons traité <b>quatre défis en profondeur</b> : 1 (programmes et activités), 2 (parcours de l’entrepreneur), 4 (centralisation et reporting) et 8 (pilotage). Nous les démontrons dans l’application réelle, avec des données fictives.</p>
+<div class="roles">
+  <div class="role"><p class="k">Pour le chargé</p><p>Une page « Aujourd’hui » qui liste ce qu’il doit faire, et des gestes en un clic : confirmer, rappeler, clôturer, rédiger.</p></div>
+  <div class="role"><p class="k">Pour le bénéficiaire</p><p>Un espace où ses rapports et ses exercices deviennent des actions.</p></div>
+  <div class="role"><p class="k">Pour le PMO</p><p>Des chiffres saisis une seule fois, validés, comparés et transformés en alertes.</p></div>
+</div>
+<div class="kpis">
+  <div class="kpi"><p class="v">4</p><p class="l">défis traités en profondeur</p></div>
+  <div class="kpi"><p class="v">7</p><p class="l">points de douleur levés</p></div>
+  <div class="kpi"><p class="v">3</p><p class="l">rôles : PMO, chargé, bénéficiaire</p></div>
+  <div class="kpi"><p class="v">150</p><p class="l">tests automatiques de bout en bout</p></div>
+</div>
+</section>
+
+<!-- 02 -->
+<section>
+<h2>Notre approche : centrée sur le chargé d’incubation</h2>
+<p>Nous sommes partis de la personne qui fait vivre le programme au quotidien : le chargé d’incubation de chaque centre. Le PMO et le bénéficiaire profitent de ce qu’il saisit, une seule fois.</p>
+<div class="steps">
+  <div class="step"><span class="n">1</span><h4>Écouter</h4><p>Entretien avec le client le 19 novembre 2026 ; les besoins notés au tableau.</p></div>
+  <div class="step"><span class="n">2</span><h4>Formuler</h4><p>Un backlog de 26 besoins (PBI), dont 7 user stories écrites avec le client, priorisées en MoSCoW (17 Must).</p></div>
+  <div class="step"><span class="n">3</span><h4>Choisir</h4><p>Les défis 1, 2, 4 et 8 couvrent la journée du chargé, de la planification au rapport validé.</p></div>
+  <div class="step"><span class="n">4</span><h4>Construire et vérifier</h4><p>Chaque user story devient un geste dans l’application, rejoué par des tests automatiques.</p></div>
+  <div class="step"><span class="n">5</span><h4>Démontrer</h4><p>Une vidéo tournée dans l’application réelle suit ce même fil, défi par défi.</p></div>
+</div>
+<div class="note"><b>Principe directeur</b>, issu du guide du participant : <b>éviter la multiplication des saisies</b>. Un chiffre est saisi sur le terrain, puis réutilisé dans le rapport, le tableau de bord et les alertes.</div>
+</section>
+
+<!-- 03 -->
+<section>
+<h2>Les points de douleur du chargé d’incubation</h2>
+<p>Sept points de douleur, relevés lors de l’entretien client, ont guidé chaque choix. Chacun trouve une réponse concrète dans l’application.</p>
+<table>
+<thead><tr><th style="width:17%">Point de douleur</th><th style="width:31%">Ce que vit le chargé aujourd’hui</th><th>Réponse dans ELIFE Hub</th><th style="width:7%">Défi</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>Deux ateliers dans la même salle, découverts le jour J</td><td>Conflits de salle, d’intervenant et de staff signalés avant l’enregistrement</td><td><span class="d">1</span></td></tr>
+<tr><td>Intervenants</td><td>Un intervenant qui ne vient pas, faute de confirmation</td><td>Statut Proposé → Confirmé / Refusé, alerte à J-3</td><td><span class="d">1</span></td></tr>
+<tr><td>Oublis d’information</td><td>Lien Meet, programme du jour ou rappel oubliés</td><td>Fiche d’activité complète, rappel J-1 tracé</td><td><span class="d">1</span></td></tr>
+<tr><td>Présences</td><td>Feuilles papier recopiées à la main</td><td>Cohorte pré-cochée à la clôture, taux calculé</td><td><span class="d">1</span></td></tr>
+<tr><td>Suivi des entrepreneurs</td><td>Candidatures, sélection et séances dispersées</td><td>Import Excel contrôlé, parcours de sélection, fiche et espace bénéficiaire</td><td><span class="d">2</span></td></tr>
+<tr><td>Rapports</td><td>Chiffres ressaisis dans chaque rapport</td><td>Rapport d’activité pré-rempli, validé et verrouillé par le PMO</td><td><span class="d">4</span></td></tr>
+<tr><td>Visibilité du PMO</td><td>Retards connus en fin de mois</td><td>Tableau de bord par centre, alertes avant le problème</td><td><span class="d">8</span></td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- 04 -->
+<section>
+<h2>Défi 1 — Gestion intégrée des programmes et des activités <span class="tag">Vidéo 0:07 – 0:47</span></h2>
+<p class="intro">Le chargé planifie, fait confirmer, rappelle et clôture chaque activité depuis une seule fiche, sans conflit ni papier.</p>
+<div class="flow"><span>1 · Planifier</span><em>→</em><span>2 · Confirmer</span><em>→</em><span>3 · Rappeler</span><em>→</em><span>4 · Clôturer</span></div>
+<table>
+<thead><tr><th style="width:42%">User story (backlog client)</th><th>Ce que fait l’application</th></tr></thead>
+<tbody>
+<tr><td><span class="pbi">PBI-04</span><span class="star">★</span> « En tant que responsable, je veux planifier une activité sous un programme avec un intervenant et une cohorte »</td><td>Formulaire avec type, date, heure, cohorte et intervenant ; vues liste, semaine et mois</td></tr>
+<tr><td><span class="pbi">PBI-06</span><span class="star">★</span> Salle, budget, équipements et conflits</td><td>Conflit de salle, d’intervenant ou de staff signalé avant l’enregistrement ; budget affiché</td></tr>
+<tr><td><span class="pbi">PBI-07</span> Contenu et lien en ligne</td><td>Programme du jour, supports, lien Meet/Zoom, lieu et contact sur une seule fiche</td></tr>
+<tr><td><span class="pbi">PBI-10</span> Assigner et confirmer l’intervenant</td><td>Proposé → Confirmé ou Refusé ; un refus repasse l’activité en « intervenant à trouver » ; alerte à J-3</td></tr>
+<tr><td><span class="pbi">PBI-08</span> Rappels automatiques</td><td>Rappel J-1 aux participants et à l’intervenant, tracé sur l’activité (e-mail simulé dans le prototype)</td></tr>
+<tr><td><span class="pbi">PBI-13</span> Fiche de présence numérique</td><td>Cohorte pré-cochée à la clôture, taux de présence calculé et repris partout</td></tr>
+</tbody>
+</table>
+<div class="callout"><span class="k">Douleur levée</span><p>Le chargé n’apprend plus un conflit ou une absence d’intervenant le jour J : la page « Aujourd’hui » les lui signale avant.</p></div>
+</section>
+
+<!-- 05 -->
+<section>
+<h2>Défi 2 — Parcours d’incubation et suivi des entrepreneurs <span class="tag">Vidéo 0:47 – 1:27</span></h2>
+<p class="intro">Le chargé suit chaque entrepreneur de sa candidature à sa sortie, et le bénéficiaire devient acteur de son propre parcours.</p>
+<div class="flow"><span>1 · Candidature</span><em>→</em><span>2 · Sélection</span><em>→</em><span>3 · Accompagnement</span><em>→</em><span>4 · Espace bénéficiaire</span></div>
+<table>
+<thead><tr><th style="width:42%">User story</th><th>Ce que fait l’application</th></tr></thead>
+<tbody>
+<tr><td><span class="pbi">PBI-23</span> « En tant que responsable, je veux suivre chaque entrepreneur (dossier → entretien → avis → sélection → étapes) »</td><td>Parcours de sélection : entretien noté sur 5, avis du comité, décision ; étapes pré-incubation → incubation → suivi, avec historique</td></tr>
+<tr><td>Inscrire les candidats sans ressaisie (besoin du chargé)</td><td>Saisie manuelle ou import Excel : doublons ignorés, erreurs signalées champ par champ, seules les lignes valides insérées</td></tr>
+<tr><td>Suivre séances, livrables et exercices</td><td>Fiche entrepreneur complète ; exercices donnés par le chargé, relus puis validés ou renvoyés</td></tr>
+<tr><td>Impliquer le bénéficiaire</td><td>« Mon espace » : ses rapports et exercices deviennent des actions ; il ne voit que ses propres données, toute autre tentative est refusée et journalisée</td></tr>
+</tbody>
+</table>
+<p>Le PBI-23 était classé « Could » dans le backlog ; nous l’avons livré parce qu’il répond directement au défi 2 et au suivi quotidien du chargé.</p>
+<div class="callout"><span class="k">Douleur levée</span><p>Candidatures, sélection et séances ne sont plus dispersées dans des fichiers : tout le parcours tient sur une fiche.</p></div>
+</section>
+
+<!-- 06 -->
+<section>
+<h2>Défi 4 — Centralisation des données et reporting <span class="tag">Vidéo 1:27 – 2:07</span></h2>
+<p class="intro">Le chargé ne ressaisit plus aucun chiffre : ses rapports se remplissent depuis ses fiches, le PMO valide et la consolidation des six centres est immédiate.</p>
+<div class="flow"><span>1 · Pré-remplir</span><em>→</em><span>2 · Soumettre</span><em>→</em><span>3 · Valider</span><em>→</em><span>4 · Consolider</span></div>
+<table>
+<thead><tr><th style="width:42%">User story (backlog client)</th><th>Ce que fait l’application</th></tr></thead>
+<tbody>
+<tr><td><span class="pbi">PBI-02</span><span class="star">★</span> « Base partagée des 6 centres, afin de ne plus consolider à la main »</td><td>Une seule base : ce qu’un centre saisit apparaît aussitôt côté PMO</td></tr>
+<tr><td><span class="pbi">PBI-19</span> Rapport d’activité pré-rempli</td><td>Présents, taux, intervenant, budget et rapports bénéficiaires déjà remplis ; le chargé ajoute difficultés et besoins d’appui</td></tr>
+<tr><td><span class="pbi">PBI-20</span> Soumission et validation</td><td>Le PMO valide (chiffres figés, rapport verrouillé) ou renvoie avec un motif obligatoire</td></tr>
+<tr><td>Rapport mensuel du centre</td><td>Généré depuis les saisies, avec contrôle qualité ; remarques échangées entre PMO et chargé ; export CSV sans données personnelles</td></tr>
+</tbody>
+</table>
+<div class="callout"><span class="k">Douleur levée</span><p>Le rapport n’est plus une tâche de fin de mois : les chiffres du rapport, de la fiche et du tableau de bord sont les mêmes, calculés une seule fois.</p></div>
+</section>
+
+<!-- 07 -->
+<section>
+<h2>Défi 8 — Pilotage stratégique et aide à la décision <span class="tag">Vidéo 2:07 – 2:47</span></h2>
+<p class="intro">Ce que le chargé saisit devient, sans effort de sa part, la vision globale du PMO : indicateurs, comparaison des centres et alertes qui mènent à l’action.</p>
+<div class="flow"><span>1 · Mesurer</span><em>→</em><span>2 · Comparer</span><em>→</em><span>3 · Alerter</span><em>→</em><span>4 · Agir</span></div>
+<table>
+<thead><tr><th style="width:42%">User story (backlog client)</th><th>Ce que fait l’application</th></tr></thead>
+<tbody>
+<tr><td><span class="pbi">PBI-01</span><span class="star">★</span> « Chaque utilisateur a un rôle et un centre, afin de ne voir que les données de son centre »</td><td>Rôles PMO, chargé et bénéficiaire ; droits vérifiés à chaque page, fiche et action</td></tr>
+<tr><td><span class="pbi">PBI-21</span> Tableau de bord PMO</td><td>Par centre : activités par état, exécution, présence, couverture coaching, rapports en attente ; chaque chiffre mène à la liste ; « Pas de donnée » plutôt qu’un 0 trompeur</td></tr>
+<tr><td><span class="pbi">PBI-22</span> Alertes PMO</td><td>Intervenant non confirmé à J-3, activité non clôturée, rapport d’activité ou mensuel en retard, centre et jours de retard</td></tr>
+<tr><td>Distinguer le fiable du provisoire</td><td>Chaque indicateur porte sa formule et la mention « Validé » ou « Provisoire » selon la validation des rapports</td></tr>
+</tbody>
+</table>
+<div class="note">Dans la démonstration, les alertes passent de <b>22 à 20</b> : les actions du chargé (intervenant confirmé, rapport soumis puis validé) se lisent directement dans la vue du PMO.</div>
+<div class="callout"><span class="k">Douleur levée</span><p>Le chargé ne remonte plus rien par e-mail ; le PMO voit qui a besoin d’appui au moment où il peut encore agir.</p></div>
+</section>
+
+<!-- 08 -->
+<section class="break">
+<h2>Démonstration et preuves</h2>
+<p>Toutes les captures et la vidéo montrent <b>l’application réelle</b>, utilisée avec des données fictives. Il n’y a ni maquette ni montage d’écran.</p>
+<h3>Vidéo pitch — 2 min 57 s, ralentie, sans titres ni musique pour être commentée en direct</h3>
+<table>
+<thead><tr><th style="width:15%">Séquence</th><th style="width:15%">Minutage</th><th>Ce que l’on voit</th></tr></thead>
+<tbody>
+<tr><td>Ouverture</td><td class="num">0:00 – 0:07</td><td>Les quatre défis traités</td></tr>
+<tr><td>Défi 1</td><td class="num">0:07 – 0:47</td><td>Conflit bloqué avant l’enregistrement, intervenant confirmé, rappel J-1 tracé, clôture avec présences</td></tr>
+<tr><td>Défi 2</td><td class="num">0:47 – 1:27</td><td>Import Excel (2 insérés, 2 doublons, 3 erreurs), sélection, fiche d’Amira, espace bénéficiaire, accès refusé et journalisé</td></tr>
+<tr><td>Défi 4</td><td class="num">1:27 – 2:07</td><td>Rapport pré-rempli, qualitatif ajouté, validation et verrouillage par le PMO, consolidation des six centres</td></tr>
+<tr><td>Défi 8</td><td class="num">2:07 – 2:47</td><td>Indicateurs validés ou provisoires, comparaison des centres, alertes passées de 22 à 20, clic vers l’activité à traiter</td></tr>
+<tr><td>Conclusion</td><td class="num">2:47 – 2:57</td><td>Quatre défis, un seul fil</td></tr>
+</tbody>
+</table>
+<h3>Preuves vérifiables</h3>
+<ul>
+<li><b>150 tests automatiques de bout en bout</b> (Playwright) rejouent en une commande les parcours des trois rôles, du mobile au grand écran. Ils couvrent notamment la détection des conflits, l’import Excel, les droits d’accès et les calculs d’indicateurs.</li>
+<li>Chaque user story du backlog client citée dans ce rapport correspond à un écran qu’on peut ouvrir pendant la session de questions.</li>
+<li>Une démonstration en direct est possible : le prototype s’ouvre en un double-clic, sans installation.</li>
+</ul>
+</section>
+
+<!-- 09 -->
+<section>
+<h2>Faisabilité, limites et feuille de route</h2>
+<div class="roles">
+  <div class="role"><p class="k">Technologie simple</p><p>HTML, CSS et JavaScript sans dépendance. Le prototype fonctionne sans serveur, sur ordinateur comme sur mobile.</p></div>
+  <div class="role"><p class="k">Confidentialité intégrée</p><p>Chaque page, fiche et action vérifie le rôle et le centre. Les refus sont journalisés ; les exports consolidés ne contiennent aucune donnée personnelle.</p></div>
+  <div class="role"><p class="k">Qualité mesurée</p><p>150 tests automatiques rejouent les parcours complets des trois rôles.</p></div>
+</div>
+<h3>Limites que nous assumons</h3>
+<table>
+<thead><tr><th style="width:34%">Limite</th><th style="width:38%">Pourquoi</th><th>Suite prévue</th></tr></thead>
+<tbody>
+<tr><td>Les e-mails de rappel sont simulés</td><td>Nous n’avons pas de serveur d’envoi pendant le hackathon</td><td>Envoi réel par n8n, sans changer l’écran</td></tr>
+<tr><td>Les données sont stockées dans le navigateur</td><td>Un prototype sans serveur s’installe en zéro minute</td><td>Base partagée côté serveur</td></tr>
+<tr><td>La gestion documentaire n’est pas couverte</td><td>Elle est hors du périmètre des défis 1, 2, 4 et 8</td><td>Phase 3</td></tr>
+<tr><td>Certaines user stories restent en attente (PBI-14, 15, 16 à 18)</td><td>Nous avons choisi la profondeur plutôt que la largeur</td><td>Phases 2 et 3</td></tr>
+<tr><td>Les défis 3, 5, 6 et 7 ne sont pas approfondis</td><td>Même choix ; leurs écrans restent en place dans le prototype</td><td>À reprendre avec un centre pilote</td></tr>
+</tbody>
+</table>
+<h3>Feuille de route</h3>
+<div class="road">
+  <div><p class="k">Étape 1</p><h4>Centre pilote</h4><p>Déploiement chez un chargé d’incubation volontaire, avec ses vraies données, et un retour chaque semaine.</p></div>
+  <div><p class="k">Étape 2</p><h4>Envois réels</h4><p>Rappels et alertes par e-mail via n8n.</p></div>
+  <div><p class="k">Étape 3</p><h4>Base partagée</h4><p>Mise en ligne sécurisée pour les six centres et le PMO.</p></div>
+  <div><p class="k">Étape 4</p><h4>Documents et comptes rendus</h4><p>Pièces jointes, PV de comité et rapports archivés.</p></div>
+</div>
+</section>
+
+<!-- 10 -->
+<section class="break">
+<h2>Équipe et livrables</h2>
+<h3>Équipe : <span class="ph">[Nom de l’équipe]</span></h3>
+<table>
+<thead><tr><th style="width:45%">Membre</th><th>Rôle</th></tr></thead>
+<tbody>
+<tr><td class="ph">[Prénom Nom]</td><td class="ph">[Rôle]</td></tr>
+<tr><td class="ph">[Prénom Nom]</td><td class="ph">[Rôle]</td></tr>
+<tr><td class="ph">[Prénom Nom]</td><td class="ph">[Rôle]</td></tr>
+<tr><td class="ph">[Prénom Nom]</td><td class="ph">[Rôle]</td></tr>
+<tr><td class="ph">[Prénom Nom]</td><td class="ph">[Rôle]</td></tr>
+</tbody>
+</table>
+<h3>Livrables remis au jury</h3>
+<ul>
+<li><b>Prototype ELIFE Hub</b> : l’application complète, avec ses trois rôles (PMO, chargé d’incubation, bénéficiaire) et un jeu de données fictives.</li>
+<li><b>Parcours utilisateurs</b> : les user stories des défis 1, 2, 4 et 8, reliées à leurs écrans.</li>
+<li><b>Présentation</b> : 11 diapositives qui reprennent le problème, l’approche, les quatre défis et la feuille de route.</li>
+<li><b>Vidéo de démonstration</b> : 2 min 57 s, 40 s par défi, avec les notes du présentateur.</li>
+<li><b>Tests automatiques</b> : 150 vérifications de bout en bout.</li>
+</ul>
+<div class="end"><svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true" class="logo"></svg><b style="color:var(--ink);font-size:12pt">4 défis, un seul fil.</b><span>ELIFE NextGen Fest 2026</span></div>
+</section>
+
+</main>
+
+<script>
+// Same brand mark as the app (js/core/icons.js): six arcs, the six centres, around the PMO.
+function logo(svg, strokeW){
+  const arc=(i)=>{const a0=((-90+i*60+8.5)*Math.PI)/180,a1=a0+(43*Math.PI)/180;
+    const p=(a)=>[50+38*Math.cos(a),50+38*Math.sin(a)].map(v=>v.toFixed(1));
+    const [x0,y0]=p(a0),[x1,y1]=p(a1);
+    return `<path d="M${x0} ${y0}A38 38 0 0 1 ${x1} ${y1}" fill="none" stroke="${i===1?'#2A9D99':'#5645D4'}" stroke-width="${strokeW}" stroke-linecap="round"/>`;};
+  svg.innerHTML=[0,1,2,3,4,5].map(arc).join('')+'<circle cx="50" cy="50" r="12" fill="#0A1530"/>';
+}
+document.querySelectorAll('svg.logo').forEach(s=>logo(s,9));
+const big=document.getElementById('bigLogo'); logo(big,6); big.querySelector('circle').remove(); big.style.opacity=.12;
+</script>
+</body>
+</html>

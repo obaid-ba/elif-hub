@@ -50,7 +50,7 @@ Conseils :
 | 2:07 | Carte du défi | « Quatrième défi : donner au PMO une vision globale pour décider. » |
 | 2:14 | **Mesurer** | « Les indicateurs sont marqués validés ou provisoires, avec leur formule. Ici, le taux de présence de chaque centre. » |
 | 2:21 | **Comparer** | « Centre par centre : activités par état, présence, rapports en attente. On voit tout de suite qui a besoin d'appui. » |
-| 2:28 | **Alerter** | « Les alertes arrivent avant le problème. Et regardez : 22 au début de la démo, 20 maintenant, grâce aux actions du chargé que vous venez de voir. » |
+| 2:28 | **Alerter** | « Les alertes arrivent avant le problème. Le panneau en affiche 20 : il y en avait 22 au début de la démo, et les actions du chargé que vous venez de voir en ont fait disparaître deux. » |
 | 2:35 | **Agir** | « Un clic sur un chiffre, et le PMO arrive directement sur l'activité à traiter. » |
 
 ## Récapitulatif et conclusion · 2:47 – 2:57

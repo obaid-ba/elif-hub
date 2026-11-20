@@ -1,0 +1,14 @@
+const { chromium } = createRequire(import.meta.url)(path.join(os.homedir(), '.npm/_npx/705bc6b22212b352/node_modules/playwright'));
+const CHROME = ['/usr/bin/google-chrome', path.join(os.homedir(), '.cache/ms-playwright/chromium-1234/chrome-linux64/chrome')].find((p) => fs.existsSync(p));
+import path from 'node:path';
+import { createRequire } from 'node:module'; import os from 'node:os'; import fs from 'node:fs';
+const src = path.resolve(process.argv[2]), out = path.resolve(process.argv[3]);
+const b = await chromium.launch({ executablePath: CHROME });
+const p = await b.newPage();
+await p.goto('file://' + src, { waitUntil: 'networkidle' });
+await p.evaluate(() => document.fonts.ready);
+const foot = `<div style="width:100%;font:500 7.5pt Inter,sans-serif;color:#69645E;padding:0 18mm;display:flex;justify-content:space-between"><span>ELIFE Hub · Rapport au jury</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
+const base = { format: 'A4', printBackground: true, preferCSSPageSize: true };
+await p.pdf({ ...base, path: out + '.cover.pdf', pageRanges: '1' });
+await p.pdf({ ...base, path: out + '.body.pdf', pageRanges: '2-', displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: foot });
+await b.close();
