@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>ELIFE Hub · Scène vidéo</title>
+<!-- 1920×1080 production stage. The real application runs in the iframe; this page only adds
+     camera, cursor, titles and annotation cards. Everything is a pure function of the frame index,
+     so the render is identical on every run (see render.mjs). Open it in a browser to preview:
+     ?play=1 plays in real time. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="stage.css">
+</head>
+<body>
+<div id="stage">
+  <div id="bg"><i class="halo h1"></i><i class="halo h2"></i></div>
+  <div id="cam">
+    <div id="win">
+      <div class="titlebar"><span class="dots"><i></i><i></i><i></i></span><span class="url"><svg viewBox="0 0 100 100" width="14" height="14"><circle cx="50" cy="50" r="38" fill="none" stroke="#5645D4" stroke-width="10" stroke-dasharray="29 11"/><circle cx="50" cy="50" r="12" fill="#0A1530"/></svg>ELIFE Hub</span><span class="role" id="role"></span></div>
+      <div class="viewport"><iframe id="app" src="../../index.html" title="ELIFE Hub"></iframe><div id="spot"></div></div>
+    </div>
+  </div>
+  <div id="cards"></div>
+  <div id="caption"><div class="kicker" id="cap-kicker"></div><div class="title" id="cap-title"></div><div class="sub" id="cap-sub"></div></div>
+  <div id="full"></div>
+  <div id="wipe"></div>
+  <div id="cursor"><i class="ripple"></i><svg viewBox="0 0 24 24" width="30" height="30"><path d="M4 2.5 19.5 12 12.4 13.6 9.2 20.5z" fill="#1C1B1A" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+  <div id="demo-badge">Données de démonstration · personnes fictives</div>
+</div>
+<script src="timeline.js"></script>
+</body>
+</html>

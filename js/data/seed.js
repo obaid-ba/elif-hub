@@ -296,8 +296,8 @@
     const portal = d.entrepreneurs.filter((e) => e.portal);
     const amira = portal.find((e) => e.centre === 'djerba') || ents('djerba', ['incub'])[0];
     if (amira) {
-      X(amira, 'Rédiger la proposition de valeur', 'En 5 lignes : pour qui, quel problème, quelle solution, pourquoi vous plutôt qu’un concurrent.', EH.addDays(T, -20), EH.addDays(T, -12), 'validated', 'Pour les touristes en quête d’authenticité, des ateliers de poterie avec les artisans de Guellala, réservables en ligne.', 'Clair et concret. Gardez cette phrase pour le pitch.');
-      X(amira, 'Calculer le prix de revient d’un atelier', 'Listez tous les coûts (matière, four, temps de l’artisan, local) pour un atelier de 8 personnes. Utilisez le modèle partagé en séance.', EH.addDays(T, -8), EH.addDays(T, -1), 'submitted', 'Coût total : 236 DT pour 8 personnes, soit 29,5 DT par participant. Le four représente 30 % du coût.');
+      X(amira, 'Rédiger la proposition de valeur', 'En 5 lignes : pour qui, quel problème, quelle solution, pourquoi vous plutôt qu’un concurrent.', EH.addDays(T, -20), EH.addDays(T, -12), 'validated', 'Pour les épiceries fines et les pâtissiers de Djerba, un sirop de dattes naturel, sans sucre ajouté, produit à partir des dattes déclassées de la région.', 'Clair et concret. Gardez cette phrase pour le pitch.');
+      X(amira, 'Calculer le prix de revient d’une bouteille', 'Listez tous les coûts (dattes, énergie, bouteille, étiquette, main-d’œuvre) pour une bouteille de 50 cl. Utilisez le modèle partagé en séance.', EH.addDays(T, -8), EH.addDays(T, -1), 'submitted', 'Coût de revient : 6,8 DT la bouteille de 50 cl. L’emballage représente 35 % du coût.');
       X(amira, 'Interviewer cinq clients potentiels', 'Posez les 6 questions du guide d’entretien à cinq personnes de votre cible et notez les réponses marquantes.', EH.addDays(T, -2), EH.addDays(T, 6), 'todo');
     }
     portal.filter((e) => e !== amira).forEach((e, i) => {
@@ -310,7 +310,7 @@
     });
 
     const F = (partner, e, kind, amount, date, note = '') => fundings.push({ id: 'fu' + (fundings.length + 1), partner, entrepreneurId: e.id, centre: e.centre, kind, amount, date, note });
-    if (amira) F('pa2', amira, "Prêt d'honneur", 8000, '2026-10-20', 'Équipement du four et site de réservation');
+    if (amira) F('pa2', amira, "Prêt d'honneur", 8000, '2026-10-20', 'Presse à dattes et pasteurisateur');
     ['djerba', 'beja', 'siliana', 'lekef', 'tozeur', 'sidibouzid'].forEach((cid, i) => {
       const list = ents(cid, ['incub', 'suivi']).filter((e) => e !== amira);
       if (list[0]) F('pa1', list[0], 'Subvention', 5000 + 1500 * i, '2026-09-1' + (i % 9), 'Fonds d’amorçage ELIFE');
