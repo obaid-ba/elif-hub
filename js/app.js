@@ -82,7 +82,7 @@
   const navCount = (id) => {
     const d = S.data, sc = S.scope();
     if (id === 'alertes') return { n: Q.alerts(d, null).length, alert: true };
-    if (id === 'rapports') return { n: d.reports.filter((r) => r.status === 'submitted').length + d.corrections.filter((c) => c.status === 'open').length };
+    if (id === 'rapports') return { n: d.reports.filter((r) => r.status === 'submitted').length + d.corrections.filter((c) => c.status === 'open').length + (d.activityReports || []).filter((r) => r.status === 'submitted').length };
     if (EH.benefNavCount && S.isBeneficiary()) return EH.benefNavCount(id);
     if (id === 'aujourdhui') return { n: EH.todayItems ? EH.todayItems().length : 0 };
     if (id === 'connaissances' && S.isPmo()) return { n: d.knowledge.filter((k) => k.status === 'draft').length };

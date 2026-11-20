@@ -18,6 +18,8 @@
     return `<div class="table-wrap"><table class="table"><caption class="sr-only">Chiffres du rapport</caption><tbody>
       ${row('Activités réalisées', `${f.activitiesDone} / ${f.activitiesPlanned}`, `${f.activitiesCancelled} annulée(s), ${f.activitiesOpen} non clôturée(s)`)}
       ${row('Participants aux activités', f.participants, 'Somme des présences cochées')}
+      ${row('Taux de présence', f.attendance == null ? '<span class="muted">Pas de donnée</span>' : Math.round(f.attendance) + EH.NBSP + '%', 'Présences ÷ participants attendus, activités réalisées')}
+      ${f.activityReportsExpected ? row("Rapports d'activité validés", `${f.activityReportsValidated} / ${f.activityReportsExpected}`, 'Activités réalisées depuis le ' + EH.fmtDateY(EH.REF.ACTIVITY_REPORT_START)) : ''}
       ${row('Séances de coaching et mentorat', f.sessions, `${f.coached} entrepreneur(s) accompagné(s)`)}
       ${row('Nouveaux candidats', f.newApplicants)}
       ${row("Changements d'étape", f.stageMoves, f.abandons ? `dont ${f.abandons} abandon(s)` : '')}
@@ -69,9 +71,15 @@
         ] };
       });
       const due = EH.periodDue(period);
+      const AR = EH.REF.activityReportStatus, arFilter = EH.f('rep.ar', 'submitted');
+      const arAll = d.activities.filter(Q.activityReportExpected).map((a) => ({ a, st: Q.activityReportStatus(d, a), late: Q.activityReportLate(d, a), r: Q.activityReport(d, a.id) }));
+      const arList = arAll.filter((x) => arFilter === 'all' || (arFilter === 'late' ? x.late : x.st === arFilter)).sort((x, y) => (x.a.date < y.a.date ? 1 : -1));
+      const arPanel = C.panel({ title: "Rapports d'activité", id: 'activity-reports', count: arAll.filter((x) => x.st === 'submitted').length,
+        actions: C.seg('rep.ar', [{ value: 'submitted', label: 'À valider', count: arAll.filter((x) => x.st === 'submitted').length }, { value: 'late', label: 'En retard', count: arAll.filter((x) => x.late).length }, { value: 'validated', label: 'Validés', count: arAll.filter((x) => x.st === 'validated').length }, { value: 'all', label: 'Tous', count: arAll.length }], arFilter, "Filtrer les rapports d'activité"),
+        body: arList.length ? arList.map((x) => `<div class="list-row">${C.ico('file', x.late ? 'bad' : x.st === 'validated' ? 'ok' : x.st === 'submitted' ? 'accent' : '')}<div class="body"><button type="button" class="link-btn title" ${C.on('open-activity-report', { id: x.a.id })}>${esc(x.a.title)}</button><div class="meta">${esc(Q.centreName(d, x.a.centre))} · réalisée le ${EH.fmtDate(x.a.date)} · ${x.a.attendees.length}/${x.a.expected} présents${x.r && x.r.submittedAt ? ' · soumis le ' + EH.fmtDate(x.r.submittedAt.slice(0, 10)) : ''}</div></div><div class="row-actions">${C.statusBadge(AR, x.st)}${x.late ? C.badge('En retard', 'bad', 'alert') : ''}${C.btn(x.st === 'submitted' ? 'Examiner' : 'Ouvrir', { action: 'open-activity-report', data: { id: x.a.id }, size: 'sm', variant: x.st === 'submitted' ? 'primary' : '' })}</div></div>`).join('') : C.empty({ title: 'Rien pour ce filtre', text: "Les rapports d'activité soumis par les centres apparaissent ici." }) });
       return C.pageHead('Rapports mensuels', `Générés à partir des saisies des centres. Échéance de ${EH.fmtMonth(period).toLowerCase()} : ${EH.fmtDateY(due)}. Une période validée est verrouillée.`,
         EH.periodSeg('rep.period') + C.btn("Copier l'export CSV", { action: 'export-csv', icon: 'copy', data: { period } })) +
-        C.panel({ body: C.table({ caption: 'Rapports par centre', cols: [{ label: 'Centre' }, { label: 'Statut' }, { label: 'Soumis le', cls: 'hide-sm' }, { label: 'Activités', cls: 'num' }, { label: 'Participants', cls: 'num hide-sm' }, { label: 'Séances', cls: 'num hide-sm' }, { label: 'Qualité', cls: 'hide-md' }, { label: '', cls: 'actions' }], rows }) });
+        `<div style="margin-bottom:var(--s-4)">${arPanel}</div>` + C.panel({ title: 'Rapports mensuels', body: C.table({ caption: 'Rapports par centre', cols: [{ label: 'Centre' }, { label: 'Statut' }, { label: 'Soumis le', cls: 'hide-sm' }, { label: 'Activités', cls: 'num' }, { label: 'Participants', cls: 'num hide-sm' }, { label: 'Séances', cls: 'num hide-sm' }, { label: 'Qualité', cls: 'hide-md' }, { label: '', cls: 'actions' }], rows }) });
     }
   };
 

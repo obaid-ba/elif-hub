@@ -227,7 +227,61 @@
     const seeded = EH.seedBeneficiaryReporting({ centres, users, entrepreneurs, activities, audit });
     const logistics = EH.seedLogistics({ centres, users, entrepreneurs, activities });
     const base = Object.assign({ version: 5, rooms: logistics.rooms, centres, users, partners, programmes, cohorts, entrepreneurs, sessions, deliverables, activities, collaborations, knowledge, reports, audit, corrections: [] }, seeded);
-    return Object.assign(base, EH.seedIncubation(base));
+    Object.assign(base, EH.seedIncubation(base));
+    EH.seedWorkflow(base);
+    return base;
+  };
+
+  /* ---------- Workflow completion (PBI-08, 10, 13, 19-23): demo cases for the jury script ----------
+     Mutates d in place: session history back to June, two Djerba activities (speaker to confirm at J-2,
+     reminder to send for tomorrow), interviews and committee opinions, activity reports. Also upgrades older saves. */
+  EH.seedWorkflow = function (d) {
+    const T = EH.TODAY;
+    // 1. coaching history back to the start of the programme (deterministic, no random draw)
+    const TOPICS = ['Idéation', 'Business Model Canvas', 'Étude de marché', 'Proposition de valeur', 'Prototype', 'Clients pilotes'];
+    d.entrepreneurs.forEach((e) => {
+      const mine = d.sessions.filter((s) => s.entrepreneur === e.id);
+      if (!mine.length) return;
+      const first = mine.reduce((m, s) => (s.date < m.date ? s : m));
+      let day = EH.addDays(first.date, -14), i = 0;
+      while (day >= '2026-06-05') {
+        d.sessions.push({ id: 'se-h' + e.id + '-' + i, entrepreneur: e.id, centre: e.centre, date: day, type: i % 3 ? 'Coaching' : 'Mentorat', coach: first.coach, topic: TOPICS[i % TOPICS.length], nextAction: '', nextDue: null });
+        day = EH.addDays(day, -14); i++;
+      }
+    });
+    // 2. Djerba: one speaker still "proposed" at J-2, one activity tomorrow whose reminder is not sent yet
+    const officer = (d.centres.find((c) => c.id === 'djerba') || {}).officer;
+    const pool = d.entrepreneurs.filter((e) => e.centre === 'djerba' && e.cohort && ['preinc', 'incub', 'suivi'].includes(e.stage));
+    const add = (title, date, time, durationMin, facilitator, facilitatorStatus, room, type, budget, content) => {
+      if (d.activities.some((a) => a.centre === 'djerba' && a.title === title)) return;
+      d.activities.push({ id: 'a-w' + (d.activities.length + 1), centre: 'djerba', programme: 'p1', cohort: 'co-djerba', type, title, date, time, durationMin, duration: EH.fmtDuration(durationMin),
+        location: 'Centre ELIFE Djerba', room, facilitator, facilitatorStatus, staff: officer ? [officer] : [], expected: pool.length, status: 'planned', attendees: [], notes: '',
+        budget, equipment: ['Vidéoprojecteur', 'Paperboard'], content, supports: '', onlineLink: '', contact: 'Chargé du centre : Sami Daoud', participant: null, reminders: [] });
+    };
+    add('Mentorat pitch : répétition générale', EH.addDays(T, 1), '09:30', 120, 'pa11', 'confirmed', 'ro-djerba-1', 'Mentorat collectif', 250, 'Passage de chaque porteur (3 minutes), retours du jury fictif, plan d’amélioration.');
+    add('Atelier financement participatif', EH.addDays(T, 2), '10:00', 120, 'pa10', 'proposed', 'ro-djerba-2', 'Atelier', 300, 'Panorama des plateformes, préparer une campagne, cas pratiques.');
+    // 3. selection steps for two Djerba candidates
+    const cands = d.entrepreneurs.filter((e) => e.centre === 'djerba' && e.stage === 'candidat');
+    if (cands[0] && !cands[0].interview) cands[0].interview = { date: EH.addDays(T, -2), score: 4, comment: 'Projet clair, porteur motivé ; marché local à vérifier.', by: officer };
+    if (cands[1] && !cands[1].interview) {
+      cands[1].interview = { date: EH.addDays(T, -6), score: 3, comment: 'Idée intéressante, besoin de structurer le modèle économique.', by: officer };
+      cands[1].committee = { date: EH.addDays(T, -1), opinion: 'favorable', score: 4, comment: 'Avis favorable sous réserve de suivre le bootcamp business plan.', by: officer };
+    }
+    // 4. activity reports for activities done since the start of the feature
+    const reports = d.activityReports || (d.activityReports = []);
+    const AT = (cid, title, status, difficulties, needs, extra = {}) => {
+      const a = d.activities.find((x) => x.centre === cid && x.title === title && x.status === 'done');
+      if (!a || reports.some((r) => r.activityId === a.id)) return;
+      const r = Object.assign({ id: 'ar-' + cid, activityId: a.id, centre: cid, status, difficulties, needs, submittedAt: status === 'draft' ? null : EH.addDays(a.date, 3) + 'T17:10', reviewedAt: null, reviewedBy: null, returnReason: null, snapshot: null, version: 1 }, extra);
+      if (status === 'validated') { r.reviewedAt = EH.addDays(a.date, 5) + 'T09:30'; r.reviewedBy = 'u-pmo'; r.snapshot = EH.q.activityReportFigures(d, a); }
+      reports.push(r);
+    };
+    const M = 'Mentorat collectif : stratégie de vente';
+    AT('beja', M, 'submitted', 'Deux porteurs absents pour raisons familiales.', 'Un mentor spécialisé en vente B2B.');
+    AT('siliana', M, 'validated', 'Aucune.', 'Aucun.');
+    AT('sidibouzid', M, 'submitted', 'Salle trop petite pour le groupe.', 'Réserver la salle de la pépinière.');
+    AT('tozeur', M, 'draft', 'Présence faible pendant la récolte des dattes.', '');
+    return d;
   };
 
   /* ---------- Incubation follow-up: exercises given to beneficiaries, funders linked to projects ----------

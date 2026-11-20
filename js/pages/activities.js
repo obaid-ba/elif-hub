@@ -40,7 +40,7 @@
       const view = EH.f('act.view', 'list'), prog = EH.f('act.prog', ''), status = EH.f('act.status', ''), q = EH.norm(EH.f('act.q', ''));
       const base = Q.inScope(d.activities, centre || null).filter((a) => (!prog || a.programme === prog) && (!q || EH.norm(a.title + ' ' + a.type).includes(q)));
       const counts = EH.groupCount(base, Q.activityStatus);
-      const list = base.filter((a) => !status || Q.activityStatus(a) === status).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+      const list = base.filter((a) => !status || (status === 'upcoming' ? ['draft', 'planned', 'confirmed'].includes(Q.activityStatus(a)) : Q.activityStatus(a) === status)).sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
       const w = !pmo;
 
       let body;
@@ -61,14 +61,14 @@
             `${EH.activityLink(a)}<span class="sub">${esc(a.type)}${pmo ? ' · ' + esc(Q.centreName(d, a.centre)) : ''}</span>`,
             `<span class="truncate" style="display:block;max-width:200px">${esc(p ? p.name : '—')}</span>`,
             fac ? esc(fac) : '<span class="t-warn strong">À définir</span>',
-            a.status === 'done' ? `<span class="num">${a.attendees.length}/${a.expected}</span>` : `<span class="muted num">${a.expected} attendus</span>`,
+            a.status === 'done' ? `<span class="num">${a.attendees.length}/${a.expected}</span>${Q.attendanceRate(a) != null ? `<span class="sub num">${Math.round(Q.attendanceRate(a))}${EH.NBSP}% présents</span>` : ''}` : `<span class="muted num">${a.expected} attendus</span>`,
             C.statusBadge(AS, st),
             w && Q.needsClosing(a) ? C.btn('Clôturer', { action: 'close-activity', data: { id: a.id }, size: 'sm', variant: st === 'overdue' ? 'primary' : '' }) : ''
           ] };
         });
         body = C.panel({ body: C.table({ caption: 'Activités', cols: [{ label: 'Date' }, { label: 'Activité' }, { label: 'Programme', cls: 'hide-md' }, { label: 'Intervenant', cls: 'hide-sm' }, { label: 'Participants', cls: 'num hide-sm' }, { label: 'Statut' }, { label: '', cls: 'actions' }], rows, empty: C.empty({ icon: 'calendar', tone: '', title: 'Aucune activité', text: 'Aucune activité pour ces filtres.' }) }), foot: `<span class="muted xs">Les activités à clôturer apparaissent en premier, puis les prochaines, puis l'historique.</span>` });
       }
-      const statusSeg = C.seg('act.status', [{ value: '', label: 'Toutes', count: base.length }, ...['overdue', 'draft', 'planned', 'confirmed', 'done', 'cancelled'].map((k) => ({ value: k, label: AS[k].label, count: counts[k] || 0 }))], status, 'Statut');
+      const statusSeg = C.seg('act.status', [{ value: '', label: 'Toutes', count: base.length }, ...['overdue', 'draft', 'planned', 'confirmed', 'done', 'cancelled'].map((k) => ({ value: k, label: AS[k].label, count: counts[k] || 0 })), ...(status === 'upcoming' ? [{ value: 'upcoming', label: 'À venir', count: (counts.draft || 0) + (counts.planned || 0) + (counts.confirmed || 0) }] : [])], status, 'Statut');
       return C.pageHead('Activités', pmo ? 'Ateliers, formations et événements des six centres. Une activité « prévue » deux jours après sa date déclenche une alerte.' : 'Planifiez, puis clôturez avec les présences : les chiffres partent directement dans le rapport.',
         C.seg('act.view', [{ value: 'list', label: 'Liste' }, { value: 'week', label: 'Semaine' }, { value: 'month', label: 'Mois' }], view, 'Affichage') + (w ? C.btn('Planifier une activité', { action: 'new-activity', icon: 'plus', variant: 'primary' }) : '')) +
         `<div class="toolbar">${C.search('act.q', 'Rechercher une activité…', EH.f('act.q', ''))}${pmo ? C.filterSelect('act.centre', 'Centre', EH.centreOptions(), centre) : ''}${C.filterSelect('act.prog', 'Programme', EH.programmeOptions(centre || null, 'Tous les programmes'), prog)}</div>` +
@@ -129,6 +129,42 @@
     return `<div class="section">${head}${corr}<div class="panel">${rows}</div></div>`;
   };
 
+  /* ---------- PBI-19/20: activity report section ---------- */
+  const AR = R.activityReportStatus;
+  const activityReportSection = (d, a, st) => {
+    if (a.status !== 'done') return '';
+    const r = Q.activityReport(d, a.id), status = Q.activityReportStatus(d, a);
+    if (!status) return '';
+    const late = Q.activityReportLate(d, a), w = S.can.writeOperational(a.centre), pmo = S.can.validateReport();
+    const f = r && r.status === 'validated' && r.snapshot ? r.snapshot : Q.activityReportFigures(d, a);
+    const n = (v) => (v == null ? '<span class="muted">Pas de donnée</span>' : Math.round(v) + EH.NBSP + '%');
+    const FS = { proposed: 'proposé', confirmed: 'confirmé', refused: 'refusé' };
+    const figures = `<div class="table-wrap"><table class="table"><caption class="sr-only">Chiffres pré-remplis du rapport d'activité</caption><tbody>
+      <tr><td>Participants présents</td><td class="num strong">${f.present} / ${f.expected}</td></tr>
+      <tr><td>Taux de présence</td><td class="num strong">${n(f.rate)}</td></tr>
+      <tr><td>Intervenant</td><td class="strong">${esc(f.speaker || '—')}${f.speakerStatus ? ` <span class="muted xs">(${FS[f.speakerStatus] || ''})</span>` : ''}</td></tr>
+      <tr><td>Budget prévu</td><td class="num strong">${f.budget != null ? f.budget.toLocaleString('fr-FR') + ' DT' : '—'}</td></tr>
+      <tr><td>Rapports bénéficiaires validés</td><td class="num strong">${f.breportsExpected ? `${f.breportsValidated} / ${f.breportsExpected}` : '<span class="muted">Aucun attendu</span>'}</td></tr>
+    </tbody></table></div><p class="muted xs" style="margin-top:4px">Pré-rempli depuis la fiche : rien à ressaisir. ${r && r.status === 'validated' ? 'Chiffres figés à la validation.' : 'Les chiffres suivent la fiche jusqu’à la validation.'}</p>`;
+    const editable = w && (status === 'todo' || status === 'draft' || status === 'returned');
+    const v = Object.assign({ difficulties: r ? r.difficulties : '', needs: r ? r.needs : '' }, st.arValues || {}), er = st.arErrors || {};
+    const banner = status === 'returned' ? C.callout('warn', `<b>Renvoyé par le PMO :</b> ${esc(r.returnReason)}`)
+      : status === 'submitted' ? C.callout('info', `Soumis le ${EH.fmtDateTime(r.submittedAt)}. ${pmo ? 'Validez-le ou renvoyez-le avec un motif.' : 'Le PMO va le valider ou vous le renvoyer.'}`)
+      : status === 'validated' ? C.callout('ok', `Validé le ${EH.fmtDateTime(r.reviewedAt)} : rapport verrouillé.`)
+      : late ? C.callout('bad', `En retard : attendu depuis le ${EH.fmtDate(Q.activityReportDue(a))}`) : '';
+    const form = editable ? `<form data-form="activity-report" novalidate class="stack" style="margin-top:12px"><input type="hidden" name="version" value="${r ? r.version : 0}">
+        ${C.field({ name: 'difficulties', id: 'fld-ar-difficulties', label: 'Difficultés rencontrées', type: 'textarea', rows: 2, value: v.difficulties, error: er.difficulties, required: true })}
+        ${C.field({ name: 'needs', id: 'fld-ar-needs', label: "Besoins d'appui", type: 'textarea', rows: 2, value: v.needs, error: er.needs, required: true })}
+        <div class="page-actions" style="justify-content:flex-end">${C.btn('Enregistrer le brouillon', { type: 'submit', extra: 'data-intent="draft"' })}${C.btn('Soumettre au PMO', { type: 'submit', variant: 'primary', icon: 'send' })}</div></form>`
+      : r && (r.difficulties || r.needs) ? `<dl class="dl" style="margin-top:8px"><dt>Difficultés</dt><dd>${esc(r.difficulties || '—')}</dd><dt>Besoins d'appui</dt><dd>${esc(r.needs || '—')}</dd></dl>` : '';
+    const review = pmo && status === 'submitted' ? (st.arReturn
+      ? `<form data-form="activity-report-return" novalidate class="stack" style="margin-top:12px"><input type="hidden" name="version" value="${r.version}">${C.field({ name: 'reason', id: 'fld-ar-reason', label: 'Motif du renvoi', type: 'textarea', rows: 2, required: true, error: er.reason, autofocus: true })}
+          <div class="page-actions" style="justify-content:flex-end">${C.btn('Annuler', { action: 'ar-return-mode', data: { on: 0 } })}${C.btn('Renvoyer au centre', { type: 'submit', variant: 'danger', icon: 'undo' })}</div></form>`
+      : `<div class="page-actions" style="justify-content:flex-end;margin-top:12px">${C.btn('Renvoyer', { action: 'ar-return-mode', data: { on: 1 }, icon: 'undo' })}${C.btn('Valider et verrouiller', { action: 'ar-validate', data: { id: r.id, version: r.version }, variant: 'primary', icon: 'lock' })}</div>`) : '';
+    return `<div class="section" id="activity-report"><h3>Rapport d'activité ${C.statusBadge(AR, status)}${late ? ' ' + C.badge('En retard', 'bad', 'alert') : ''}</h3>${banner}<div class="panel" style="margin-top:8px">${figures}</div>${form}${review}</div>`;
+  };
+  EH.activityReportSection = activityReportSection;
+
   /* ---------- detail ---------- */
   EH.drawers.activity = (st) => {
     const d = S.data, a = Q.activity(d, st.id);
@@ -145,11 +181,17 @@
       Q.needsClosing(a) ? C.btn('Clôturer', { action: 'close-activity', data: { id: a.id }, variant: 'primary', icon: 'checkCircle' }) : '',
       a.status === 'planned' && !locked ? C.btn('Modifier', { action: 'edit-activity', data: { id: a.id }, icon: 'edit' }) : '',
       a.status === 'done' && !st.justClosed ? C.btn('Noter une leçon apprise', { action: 'new-knowledge', data: { activity: a.id }, icon: 'book', variant: lessons.length ? '' : 'primary' }) : '',
-      S.can.defineRequirement(a) && a.status !== 'cancelled' && !locked ? C.btn('Rapport demandé', { action: 'edit-activity', data: { id: a.id, req: 1 }, icon: 'report' }) : ''
+      S.can.defineRequirement(a) && a.status !== 'cancelled' && !locked ? C.btn('Rapport demandé', { action: 'edit-activity', data: { id: a.id, req: 1 }, icon: 'report' }) : '',
+      a.status === 'planned' && a.date >= EH.TODAY ? C.btn(a.date === EH.addDays(EH.TODAY, 1) ? 'Envoyer le rappel J-1' : 'Envoyer un rappel', { action: 'send-reminder', data: { id: a.id }, icon: 'bell', variant: Q.needsReminder(a) ? 'primary' : '' }) : ''
     ].join('') : '';
+    const rc = a.status === 'planned' ? Q.reminderRecipients(d, a) : null;
+    const speakerActions = w && a.facilitator && a.facilitatorStatus === 'proposed' && a.status === 'planned' && !locked
+      ? ` ${C.btn('Confirmé', { action: 'speaker-status', data: { id: a.id, status: 'confirmed' }, size: 'sm', icon: 'check' })}${C.btn('A refusé', { action: 'speaker-refuse', data: { id: a.id }, size: 'sm', icon: 'x' })}` : '';
+    const refused = (a.speakerHistory || []).filter((h) => h.status === 'refused');
     const body = `
       ${s === 'overdue' ? C.callout('bad', `Prévue le ${EH.fmtDate(a.date)} et toujours pas clôturée : elle est signalée au PMO.`) : ''}
-      ${s === 'draft' ? C.callout('warn', "Intervenant à trouver : choisissez un intervenant pour qu'elle soit suivie (EC-01).") : ''}
+      ${s === 'draft' ? C.callout('warn', `Intervenant à trouver : choisissez un intervenant pour qu'elle soit suivie (EC-01).${refused.length ? ` Dernier refus : ${esc((Q.partner(d, refused[refused.length - 1].partner) || {}).name || '—')}${refused[refused.length - 1].reason ? ' (' + esc(refused[refused.length - 1].reason) + ')' : ''}.` : ''}`, w && !locked ? C.btn("Choisir l'intervenant", { action: 'edit-activity', data: { id: a.id }, size: 'sm' }) : '') : ''}
+      ${Q.speakerUnconfirmed(a) ? C.callout(EH.days(EH.TODAY, a.date) <= 1 ? 'bad' : 'warn', `<b>Intervenant non confirmé à J-${EH.days(EH.TODAY, a.date)}.</b> Relancez ${esc(EH.partnerName(a.facilitator))} puis enregistrez sa réponse. Le PMO voit cette alerte.`) : ''}
       ${clashes.length ? C.callout('warn', `<b>Conflit de planning.</b><ul style="margin:4px 0 0;padding-left:18px">${clashes.map((c) => `<li>${esc(c.text)}</li>`).join('')}</ul>`) : ''}
       ${locked ? C.callout('info', 'Période validée : cette activité est verrouillée.') : ''}
       ${st.justClosed ? C.callout('ok', `<b>Activité clôturée${a.status === 'done' ? ' avec ' + EH.plural(a.attendees.length, 'présent') : ''}.</b> Ces chiffres comptent déjà dans le rapport du mois et le tableau de bord.${a.status === 'done' ? ' Voulez-vous noter ce que vous en retenez ?' : ''}`, a.status === 'done' ? C.btn('Noter une leçon apprise', { action: 'new-knowledge', data: { activity: a.id }, size: 'sm', variant: 'primary' }) + C.btn('Plus tard', { action: 'close-drawer', size: 'sm' }) : '') : ''}
@@ -157,18 +199,21 @@
         <dt>Date</dt><dd>${EH.fmtDay(a.date)} ${EH.fmtDateY(a.date).slice(-4)}${a.time ? ' · ' + esc(EH.fmtTimeRange(a)) : ''}${a.duration ? ' (' + esc(a.duration) + ')' : ''}</dd>
         <dt>Programme</dt><dd>${esc(p ? p.name : '—')}</dd>
         <dt>Centre</dt><dd>${esc(Q.centreName(d, a.centre))}${a.cohort ? ' · ' + esc((d.cohorts.find((c) => c.id === a.cohort) || {}).name || '') : ''}</dd>
-        <dt>Intervenant</dt><dd>${a.facilitator ? `<button class="link-btn" ${C.on('open-partner', { id: a.facilitator })}>${esc(EH.partnerName(a.facilitator))}</button> ${fs ? C.badge(fs[0], fs[1]) : ''}` : '<span class="t-warn">À trouver</span>'}</dd>
+        <dt>Intervenant</dt><dd>${a.facilitator ? `<button class="link-btn" ${C.on('open-partner', { id: a.facilitator })}>${esc(EH.partnerName(a.facilitator))}</button> ${fs ? C.badge(fs[0], fs[1]) : ''}${speakerActions}` : '<span class="t-warn">À trouver</span>'}</dd>
         ${a.staff && a.staff.length ? `<dt>Staff</dt><dd>${esc(a.staff.map((u) => Q.user(d, u).name).join(', '))}</dd>` : ''}
         <dt>Lieu</dt><dd>${esc([roomName(a.room), a.location].filter(Boolean).join(' · ') || '—')}</dd>
         ${a.onlineLink ? `<dt>Lien en ligne</dt><dd><a href="${esc(a.onlineLink)}" target="_blank" rel="noopener noreferrer">${esc(a.onlineLink)}</a></dd>` : ''}
         ${a.contact ? `<dt>Contact</dt><dd>${esc(a.contact)}</dd>` : ''}
         ${a.type === 'Session 1-1' && a.participant ? `<dt>Participant</dt><dd>${esc((Q.ent(d, a.participant) || {}).name || '—')}</dd>` : `<dt>Participants</dt><dd class="num">${a.status === 'done' ? `${a.attendees.length} présents sur ${a.expected} attendus` : `${a.expected} attendus`}</dd>`}
+        ${a.status === 'done' ? `<dt>Taux de présence${C.info(R.kpis.attendance.formula)}</dt><dd class="num">${Q.attendanceRate(a) == null ? '<span class="muted">Pas de donnée</span>' : `<b>${Math.round(Q.attendanceRate(a))}${EH.NBSP}%</b>${C.meter(Q.attendanceRate(a))}`}</dd>` : ''}
+        ${rc ? `<dt>Rappel</dt><dd>${(a.reminders || []).length ? (a.reminders || []).map((m) => `Envoyé le ${EH.fmtDateTime(m.at)} · ${EH.plural(m.participants, 'participant')}${m.speaker ? ' + ' + esc(m.speaker) : ''}`).join('<br>') : `<span class="muted">Pas encore envoyé · ${EH.plural(rc.count, 'destinataire')}</span>`}</dd>` : ''}
         ${a.budget != null ? `<dt>Budget prévu</dt><dd class="num">${a.budget.toLocaleString('fr-FR')} DT</dd>` : ''}
         ${a.equipment && a.equipment.length ? `<dt>Équipements</dt><dd>${a.equipment.map((x) => C.badge(x, 'outline')).join(' ')}</dd>` : ''}
         ${a.notes ? `<dt>Notes</dt><dd>${esc(a.notes)}</dd>` : ''}
       </dl>
       ${a.content || a.supports ? `<div class="section"><h3>Contenu</h3>${a.content ? `<p class="small" style="white-space:pre-line">${esc(a.content)}</p>` : ''}${a.supports ? `<ul class="small" style="margin:6px 0 0;padding-left:18px">${lines(a.supports).map((x) => `<li>${/^https?:\/\//.test(x) ? `<a href="${esc(x)}" target="_blank" rel="noopener noreferrer">${esc(x)}</a>` : esc(x)}</li>`).join('')}</ul>` : ''}</div>` : ''}
       ${a.status === 'done' ? `<div class="section"><h3>Présents <span class="muted num">${att.length}</span></h3><p class="small">${att.length ? att.map((e) => esc(e.name)).join(', ') : '<span class="muted">Aucune présence saisie.</span>'}</p></div>` : ''}
+      ${activityReportSection(d, a, st)}
       ${requirementSection(d, a)}
       ${reportsSection(d, a, st)}
       <div class="section"><h3>Leçons et ressources liées</h3>${lessons.length ? `<div class="panel">${lessons.map((k) => `<div class="list-row">${C.ico('book', 'accent')}<div class="body"><button class="link-btn" ${C.on('open-knowledge', { id: k.id })}>${esc(k.title)}</button><div class="meta">${esc(k.type)} · ${C.statusBadge(R.knowledgeStatus, Q.knowledgeStatus(k))}</div></div></div>`).join('')}</div>` : '<p class="muted small">Aucune pour le moment.</p>'}</div>`;
@@ -273,7 +318,38 @@
     });
   };
 
+  EH.modals.speakerRefuse = (m) => {
+    const a = Q.activity(S.data, m.id);
+    return C.modal({ title: "L'intervenant a refusé", form: 'speaker-refuse', body: `<p class="small">${esc(EH.partnerName(a.facilitator))} ne viendra pas à « ${esc(a.title)} ». L'activité repasse en « Intervenant à trouver ».</p>${C.field({ name: 'reason', label: 'Motif (facultatif)', type: 'textarea', rows: 2, autofocus: true, placeholder: 'Ex. : indisponible ce jour-là' })}`,
+      foot: C.btn('Annuler', { action: 'close-modal' }) + C.btn('Enregistrer le refus', { type: 'submit', variant: 'danger' }) });
+  };
+  EH.forms['speaker-refuse'] = (v) => {
+    const m = EH.ui.modal, res = EH.act.setSpeakerStatus(m.id, 'refused', v.reason);
+    if (!res.ok) { m.errors = res.errors; EH.renderOverlays(true); return; }
+    EH.closeModal(); EH.render(); EH.renderOverlays(); EH.toast(`Refus enregistré : « ${esc(res.item.title)} » repasse en intervenant à trouver.`, { label: "Choisir l'intervenant", action: () => EH.actions['edit-activity']({ dataset: { id: res.item.id } }) });
+  };
+  EH.forms['activity-report'] = (v, form, submitter) => {
+    const st = EH.ui.drawer, submit = !(submitter && submitter.dataset.intent === 'draft');
+    st.arValues = v;
+    const res = EH.act.saveActivityReport(st.id, v, submit, v.version);
+    if (!res.ok) { st.arErrors = res.errors; if (res.errors._) EH.toast(res.errors._, { tone: 'error' }); EH.renderOverlays(true); return; }
+    st.arValues = null; st.arErrors = null; EH.render(); EH.renderOverlays();
+    EH.toast(submit ? "Rapport d'activité soumis au PMO." : 'Brouillon enregistré.');
+  };
+  EH.forms['activity-report-return'] = (v) => {
+    const st = EH.ui.drawer, r = Q.activityReport(S.data, st.id);
+    const res = EH.act.reviewActivityReport(r.id, 'return', v.reason, v.version);
+    if (!res.ok) { st.arErrors = res.errors; EH.renderOverlays(true); return; }
+    st.arReturn = false; st.arErrors = null; EH.render(); EH.renderOverlays(); EH.toast("Rapport d'activité renvoyé au centre avec le motif.");
+  };
+
   Object.assign(EH.actions, {
+    'speaker-status': (el) => { const res = EH.act.setSpeakerStatus(el.dataset.id, el.dataset.status); if (!res.ok) return EH.toast(res.errors._, { tone: 'error' }); EH.render(); EH.renderOverlays(); EH.toast(`${esc(EH.partnerName(res.item.facilitator))} a confirmé sa venue.`); },
+    'open-activity-report': (el) => { EH.openDrawer('activity', { id: el.dataset.id }); const sec = document.getElementById('activity-report'); if (sec) { sec.scrollIntoView({ block: 'start' }); const f = sec.querySelector('textarea, button'); if (f) f.focus({ preventScroll: true }); } },
+    'speaker-refuse': (el) => EH.openModal('speakerRefuse', { id: el.dataset.id }),
+    'send-reminder': (el) => { const res = EH.act.sendReminder(el.dataset.id); if (!res.ok) return EH.toast(res.errors._, { tone: 'error' }); EH.render(); EH.renderOverlays(); EH.toast(`Rappel envoyé : ${EH.plural(res.reminder.participants, 'participant')}${res.reminder.speaker ? ' et ' + esc(res.reminder.speaker) : ''}. Envoi tracé sur l'activité.`); },
+    'ar-return-mode': (el) => { const st = EH.ui.drawer; st.arReturn = el.dataset.on === '1'; st.arErrors = null; EH.renderOverlays(true); },
+    'ar-validate': (el) => { const res = EH.act.reviewActivityReport(el.dataset.id, 'validate', '', el.dataset.version); if (!res.ok) return EH.toast(res.errors._, { tone: 'error' }); EH.render(); EH.renderOverlays(); EH.toast("Rapport d'activité validé et verrouillé."); },
     'open-activity': (el) => { const a = Q.activity(S.data, el.dataset.id); if (a && !S.isBeneficiary() && !S.canSeeActivity(a)) EH.act.guardActivity(a); EH.openDrawer('activity', { id: el.dataset.id }); },
     'new-activity': () => { if (S.isOfficer()) EH.openDrawer('activityForm', {}); },
     'edit-activity': (el) => { const a = Q.activity(S.data, el.dataset.id); if (!S.isOfficer()) return; EH.openDrawer('activityForm', { id: a.id, values: Object.assign({}, a, { staff: (a.staff || [])[0] || '' }), reqOnly: a.status === 'done' || el.dataset.req === '1' }); },

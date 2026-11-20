@@ -63,6 +63,38 @@
     return out;
   };
   Q.needsClosing = (a) => a.status === 'planned' && a.date <= EH.TODAY;
+  /** PBI-13: attendance rate of a done activity (null = no data). */
+  Q.attendanceRate = (a) => (a.status === 'done' && a.expected > 0 ? (100 * a.attendees.length) / a.expected : null);
+  /** Weighted attendance of the done activities of some centres over a period (null = no data). */
+  Q.attendance = (d, ids, period) => {
+    const acts = d.activities.filter((a) => ids.includes(a.centre) && a.status === 'done' && a.expected > 0 && (!period || Q.inPeriod(a.date, period)));
+    const present = acts.reduce((n, a) => n + a.attendees.length, 0), expected = acts.reduce((n, a) => n + a.expected, 0);
+    return { rate: expected ? (100 * present) / expected : null, present, expected, activities: acts.length };
+  };
+  /** PBI-10: speaker still "proposed" when the activity is within SPEAKER_CONFIRM_DAYS. */
+  Q.speakerUnconfirmed = (a) => a.status === 'planned' && !!a.facilitator && a.facilitatorStatus === 'proposed' && a.date >= EH.TODAY && EH.days(EH.TODAY, a.date) <= R.SPEAKER_CONFIRM_DAYS;
+  /** PBI-08: people a reminder goes to (cohort or 1-1 participant, plus the speaker). */
+  Q.reminderRecipients = (d, a) => {
+    const ents = a.type === 'Session 1-1' && a.participant ? [Q.ent(d, a.participant)].filter(Boolean) : d.entrepreneurs.filter((e) => e.centre === a.centre && e.cohort === a.cohort && R.activeStages.includes(e.stage));
+    const sp = a.facilitator && Q.partner(d, a.facilitator);
+    return { participants: ents, speaker: sp || null, count: ents.length + (sp ? 1 : 0) };
+  };
+  Q.needsReminder = (a) => a.status === 'planned' && a.date === EH.addDays(EH.TODAY, 1) && !(a.reminders || []).length;
+
+  /* ---------- activity reports (PBI-19/20) ---------- */
+  Q.activityReport = (d, actId) => (d.activityReports || []).find((r) => r.activityId === actId) || null;
+  Q.activityReportExpected = (a) => a.status === 'done' && a.date >= R.ACTIVITY_REPORT_START;
+  Q.activityReportDue = (a) => EH.addDays(a.date, R.ACTIVITY_REPORT_DAYS);
+  /** Effective status: todo when expected and not written yet. */
+  Q.activityReportStatus = (d, a) => { const r = Q.activityReport(d, a.id); return r ? r.status : Q.activityReportExpected(a) ? 'todo' : null; };
+  Q.activityReportLate = (d, a) => { const s = Q.activityReportStatus(d, a); return (s === 'todo' || s === 'draft' || s === 'returned') && Q.activityReportDue(a) < EH.TODAY; };
+  /** Pre-filled figures: the same fields as the activity record, so the numbers always match. */
+  Q.activityReportFigures = (d, a) => {
+    const sp = a.facilitator && Q.partner(d, a.facilitator);
+    const obs = Q.activityObligations(d, a);
+    return { expected: a.expected, present: a.attendees.length, rate: Q.attendanceRate(a), speaker: sp ? sp.name : null, speakerStatus: a.facilitatorStatus || null, budget: a.budget != null ? a.budget : null,
+      breportsValidated: obs.filter((o) => o.status === 'validated').length, breportsExpected: obs.length, date: a.date, title: a.title, type: a.type };
+  };
   Q.inPeriod = (date, period) => date && date.slice(0, 7) === period;
 
   /* ---------- beneficiary reporting (Défi 1) ---------- */
@@ -201,6 +233,9 @@
       activitiesCancelled: acts.filter((a) => a.status === 'cancelled').length,
       activitiesOpen: acts.filter((a) => a.status === 'planned').length,
       participants: done.reduce((n, a) => n + a.attendees.length, 0),
+      attendance: Q.attendance(d, [centre], period).rate,
+      activityReportsExpected: done.filter(Q.activityReportExpected).length,
+      activityReportsValidated: done.filter((a) => Q.activityReportStatus(d, a) === 'validated').length,
       sessions: ses.length,
       coached: new Set(ses.map((s) => s.entrepreneur)).size,
       newApplicants: moves.filter((m) => m.h.stage === 'candidat').length,
@@ -259,7 +294,9 @@
     const entered = ents.filter((e) => e.history.some((h) => h.stage === 'incub')).length;
     const partnersActive = d.partners.filter((p) => Q.partnerActive(d, p.id) && Q.partnerCentres(d, p.id).some((c) => ids.includes(c))).length;
     const bs = Q.beneficiaryStats(d, ents.map((e) => e.id), period);
+    const att = Q.attendance(d, ids, period);
     return {
+      attendance: att.rate, attendanceDetail: { present: att.present, expected: att.expected },
       reporting: bs.reporting, reportingDetail: bs.reportingDetail, engagement: bs.engagement, engagementDetail: bs.engagementDetail,
       active: ents.length ? active.length : null,
       byStage,
@@ -284,7 +321,9 @@
     const tot = ex.done + ex.cancelled + ex.open;
     const rep = { onTime: sum((s) => (s.reportingDetail || {}).onTime), due: sum((s) => (s.reportingDetail || {}).due) };
     const eng = { num: sum((s) => (s.engagementDetail || {}).num), den: sum((s) => (s.engagementDetail || {}).den) };
+    const att = { present: sum((s) => (s.attendanceDetail || {}).present), expected: sum((s) => (s.attendanceDetail || {}).expected) };
     return {
+      attendance: att.expected ? (100 * att.present) / att.expected : null, attendanceDetail: att,
       reporting: rep.due ? (100 * rep.onTime) / rep.due : null, reportingDetail: rep, engagement: eng.den ? (100 * eng.num) / eng.den : null, engagementDetail: eng,
       active: sum((s) => s.active), byStage,
       execution: tot ? (100 * ex.done) / tot : null, executionDetail: ex,
@@ -307,6 +346,10 @@
       list.forEach((c) => seenPair.add([a.id, c.other].join()));
       out.push({ type: 'conflict', centre: a.centre, ref: a.id, title: a.title, detail: `${EH.fmtDate(a.date)} à ${a.time} · ${list.map((c) => c.text).join(' · ')}`, days: null, sev: 'warn' });
     });
+    d.activities.filter((a) => ids.includes(a.centre) && Q.speakerUnconfirmed(a)).forEach((a) =>
+      out.push({ type: 'speaker', centre: a.centre, ref: a.id, title: a.title, detail: `${EH.fmtDay(a.date)} · ${(Q.partner(d, a.facilitator) || {}).name || 'Intervenant'} n'a pas confirmé (J-${EH.days(EH.TODAY, a.date)})`, days: null, sev: EH.days(EH.TODAY, a.date) <= 1 ? 'bad' : 'warn' }));
+    d.activities.filter((a) => ids.includes(a.centre) && Q.activityReportLate(d, a)).forEach((a) =>
+      out.push({ type: 'areport', centre: a.centre, ref: a.id, title: a.title, detail: `Rapport d'activité ${R.activityReportStatus[Q.activityReportStatus(d, a)].label.toLowerCase()}, attendu le ${EH.fmtDate(Q.activityReportDue(a))}`, days: EH.ago(Q.activityReportDue(a)), sev: 'bad' }));
     d.entrepreneurs.filter((e) => ids.includes(e.centre) && Q.atRisk(d, e)).forEach((e) =>
       out.push({ type: 'risk', centre: e.centre, ref: e.id, title: e.name, detail: `${EH.stageLabel(e.stage)} · sans séance depuis ${Q.daysWithoutSession(d, e)} jours`, days: Q.daysWithoutSession(d, e) - R.RISK_DAYS, sev: 'warn' }));
     d.entrepreneurs.filter((e) => e.portal && ids.includes(e.centre)).forEach((e) => Q.obligations(d, e).filter((o) => o.late).forEach((o) =>
@@ -329,6 +372,8 @@
     risk: { label: 'Sans séance depuis 30 j', icon: 'user' },
     breport: { label: 'Rapport bénéficiaire en retard', icon: 'report' },
     conflict: { label: 'Conflit de planning', icon: 'clock' },
+    speaker: { label: 'Intervenant non confirmé (J-3)', icon: 'handshake' },
+    areport: { label: "Rapport d'activité en retard", icon: 'file' },
     report: { label: 'Rapport en retard', icon: 'report' },
     abandon: { label: 'Abandon ce mois-ci', icon: 'trendDown' }
   };

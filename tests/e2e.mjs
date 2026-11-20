@@ -328,10 +328,10 @@ const pmoNav = await page.$$eval('.sidebar .nav-item', (n) => n.map((x) => x.tex
 check('PMO menu has no audit log', !/Journal/.test(pmoNav), pmoNav);
 await ev(() => { location.hash = 'journal'; }); await page.waitForTimeout(120);
 check('#journal is no longer a page', (await ev(() => EH.ui.route)) === 'pilotage');
-check('Dashboard charts five rates', (await page.$$('#rate-charts .ring-card')).length === 5 && (await page.$$('#rate-charts .hbar-row')).length === 6 && !!(await page.$('#rate-charts svg.trend path.line')));
-await page.click('#rate-charts .ring-card:nth-child(2)'); await page.waitForTimeout(80);
+check('Dashboard charts six rates (attendance included)', (await page.$$('#rate-charts .ring-card')).length === 6 && (await page.$$('#rate-charts .hbar-row')).length === 6 && !!(await page.$('#rate-charts svg.trend path.line')));
+await page.click('#rate-charts .ring-card:nth-child(3)'); await page.waitForTimeout(80);
 check('Picking a ring switches the chart', /Couverture coaching par centre/.test(await page.textContent('#rate-charts')));
-check('Comparison table shows rate meters', (await page.$$('#main .grid-2 .table .meter')).length >= 12);
+check('Comparison table shows rate meters', (await page.$$('#main .table .meter')).length >= 18);
 await ev(() => EH.openDrawer('report', { id: 'r-tozeur' }));
 await page.click('.drawer [data-form=report-remark] button[type=submit]'); await page.waitForTimeout(60);
 check('Empty remark refused', /Écrivez la remarque/.test(await page.textContent('.drawer')));
@@ -411,6 +411,124 @@ check('Officer validates the exercise', (await ev((id) => EH.store.data.exercise
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(URL + '#aujourdhui'); await page.waitForTimeout(120);
 check('No horizontal scroll officer home @390', (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
+await page.setViewportSize({ width: 1440, height: 900 });
+
+/* ---------- 11. Défi 1: speaker confirmation (PBI-10), J-1 reminder (PBI-08), attendance rate (PBI-13) ---------- */
+await ev(() => { localStorage.clear(); EH.store.load(); EH.render(); });
+await page.reload(); await page.waitForTimeout(150);
+await as('u-djerba');
+const W = await ev(() => { const d = EH.store.data, f = (t) => d.activities.find((a) => a.centre === 'djerba' && a.title === t).id; return { fin: f('Atelier financement participatif'), tomorrow: f('Mentorat pitch : répétition générale'), mentor: f('Mentorat collectif : stratégie de vente') }; });
+check('Unconfirmed speaker at J-2 raises an alert', await ev((id) => EH.q.alerts(EH.store.data, null).some((a) => a.type === 'speaker' && a.ref === id), W.fin));
+await page.goto(URL + '#aujourdhui'); await page.waitForTimeout(100);
+check('Officer home asks to confirm the speaker and send the reminder', /Faire confirmer Mehdi Rekik/.test(await page.textContent('#main')) && /Envoyer le rappel J-1/.test(await page.textContent('#main')));
+await ev((id) => EH.openDrawer('activity', { id }), W.fin);
+check('Drawer warns about the unconfirmed speaker', /non confirmé à J-2/.test(await page.textContent('.drawer')));
+await page.click('.drawer [data-action=speaker-status][data-status=confirmed]'); await page.waitForTimeout(80);
+check('Speaker confirmed: status Confirmée, alert gone, logged', await ev((id) => { const d = EH.store.data, a = EH.q.activity(d, id); return a.facilitatorStatus === 'confirmed' && EH.q.activityStatus(a) === 'confirmed' && !EH.q.alerts(d, null).some((x) => x.type === 'speaker' && x.ref === id) && d.audit.some((x) => x.action === 'Intervenant confirmé' && x.object === a.title); }, W.fin));
+await ev(() => EH.closeDrawer());
+await as('u-tozeur');
+const compta = await ev(() => EH.store.data.activities.find((a) => a.title === 'Formation comptabilité de base').id);
+await ev((id) => EH.openDrawer('activity', { id }), compta);
+await page.click('.drawer [data-action=speaker-refuse]'); await page.waitForTimeout(60);
+await page.fill('.modal [name=reason]', 'Indisponible ce jour-là');
+await page.click('.modal button[type=submit]'); await page.waitForTimeout(80);
+check('Refusal sends the activity back to "Intervenant à trouver"', await ev((id) => { const a = EH.q.activity(EH.store.data, id); return !a.facilitator && EH.q.activityStatus(a) === 'draft' && a.speakerHistory.some((h) => h.status === 'refused' && /Indisponible/.test(h.reason)); }, compta));
+await ev(() => EH.closeDrawer());
+await as('u-djerba');
+await ev((id) => EH.openDrawer('activity', { id }), W.tomorrow);
+check('Reminder button labelled J-1 for tomorrow', /Envoyer le rappel J-1/.test(await page.textContent('.drawer')));
+await page.click('.drawer [data-action=send-reminder]'); await page.waitForTimeout(80);
+check('Reminder traced on the activity and logged', await ev((id) => { const d = EH.store.data, a = EH.q.activity(d, id); return a.reminders.length === 1 && a.reminders[0].participants > 0 && a.reminders[0].speaker === 'Ines Kallel' && !EH.q.needsReminder(a) && d.audit.some((x) => x.action === 'Rappel envoyé'); }, W.tomorrow));
+check('Reminder visible on the drawer', /Envoyé le/.test(await page.textContent('.drawer')));
+await ev(() => EH.closeDrawer());
+const cancelledRem = await ev(() => { const d = EH.store.data, a = d.activities.find((x) => x.centre === 'djerba' && x.status === 'planned' && x.date > EH.TODAY && x.title === 'Rencontre avec les partenaires locaux'); a.status = 'cancelled'; const r = EH.act.sendReminder(a.id); a.status = 'planned'; return r; });
+check('No reminder for a cancelled activity', !cancelledRem.ok && /annulée/.test(cancelledRem.errors._));
+await ev((id) => EH.openDrawer('activity', { id }), W.mentor);
+const mentorText = await page.textContent('.drawer');
+const rate = await ev((id) => Math.round(EH.q.attendanceRate(EH.q.activity(EH.store.data, id))), W.mentor);
+check('Attendance rate shown on a done activity', /Taux de présence/.test(mentorText) && mentorText.includes(rate + ' %'), String(rate));
+
+/* ---------- 12. Défi 4: activity report pre-filled, submitted, validated (PBI-19/20) ---------- */
+check('Late activity report flagged', /En retard/.test(await page.textContent('#activity-report')) && await ev(() => EH.q.alerts(EH.store.data, 'djerba').some((a) => a.type === 'areport')));
+await page.click('#activity-report button[type=submit]:not([data-intent])'); await page.waitForTimeout(60);
+check('Submitting without difficulties/needs is refused', /Indiquez les difficultés/.test(await page.textContent('#activity-report')));
+await page.fill('#fld-ar-difficulties', 'Aucune.');
+await page.fill('#fld-ar-needs', 'Un expert en vente en ligne.');
+await page.click('#activity-report button[type=submit]:not([data-intent])'); await page.waitForTimeout(80);
+check('Officer submits the activity report', (await ev((id) => EH.q.activityReportStatus(EH.store.data, EH.q.activity(EH.store.data, id)), W.mentor)) === 'submitted');
+await ev(() => EH.closeDrawer());
+await as('u-pmo');
+await page.goto(URL + '#pilotage'); await page.waitForTimeout(100);
+check('PMO "À valider" lists the activity report', /Rapport d'activité · Mentorat collectif : stratégie de vente · Djerba/.test(await page.textContent('#main')));
+await ev((id) => EH.actions['open-activity-report']({ dataset: { id } }), W.mentor); await page.waitForTimeout(60);
+await page.click('#activity-report [data-action=ar-validate]'); await page.waitForTimeout(80);
+const arv = await ev((id) => { const d = EH.store.data, a = EH.q.activity(d, id), r = EH.q.activityReport(d, id); return { st: r.status, snapPresent: r.snapshot.present, present: a.attendees.length, rateEq: r.snapshot.rate === EH.q.attendanceRate(a), fig: EH.q.reportFigures(d, 'djerba', '2026-11') }; }, W.mentor);
+check('PMO validates: report locked with figures equal to the record', arv.st === 'validated' && arv.snapPresent === arv.present && arv.rateEq, JSON.stringify(arv));
+check('Monthly report counts validated activity reports', arv.fig.activityReportsValidated >= 1);
+const relock = await ev((id) => { EH.store.switchUser('u-djerba'); const r = EH.act.saveActivityReport(id, { difficulties: 'x', needs: 'y' }, true); EH.store.switchUser('u-pmo'); return r; }, W.mentor);
+check('A validated activity report cannot be edited', !relock.ok && /verrouillé/.test(relock.errors._));
+await ev(() => EH.closeDrawer());
+const bejaAr = await ev(() => EH.store.data.activityReports.find((r) => r.centre === 'beja').activityId);
+await ev((id) => EH.actions['open-activity-report']({ dataset: { id } }), bejaAr); await page.waitForTimeout(60);
+await page.click('#activity-report [data-action=ar-return-mode]'); await page.waitForTimeout(40);
+await page.click('#activity-report button[type=submit]'); await page.waitForTimeout(40);
+check('Return without a reason is refused', /motif du renvoi est obligatoire/i.test(await page.textContent('#activity-report')));
+await page.fill('#fld-ar-reason', 'Précisez les besoins du mentor.');
+await page.click('#activity-report button[type=submit]'); await page.waitForTimeout(80);
+check('PMO returns an activity report with a reason', (await ev((id) => EH.q.activityReport(EH.store.data, id).status, bejaAr)) === 'returned');
+check('Only the PMO validates', (await ev(() => { EH.store.switchUser('u-beja'); const id = EH.store.data.activityReports.find((r) => r.centre === 'sidibouzid').id; const r = EH.act.reviewActivityReport(id, 'validate'); EH.store.switchUser('u-pmo'); return r.ok; })) === false);
+await ev(() => EH.closeDrawer());
+
+/* ---------- 13. Défi 8: PMO dashboard by state, attendance, activity reports (PBI-21/22) ---------- */
+await page.goto(URL + '#pilotage'); await page.waitForTimeout(100);
+check('Comparison table: states, attendance and activity reports columns', /Activités par état/.test(await page.textContent('#main')) && /Présence/.test(await page.textContent('#main')) && /Rapports d'activité/.test(await page.textContent('#main')));
+check('No horizontal scroll in the comparison table @1440', await ev(() => { const t = document.querySelector('#main .table-wrap'); return t.scrollWidth <= t.clientWidth; }));
+const lekefOverdue = await ev(() => EH.store.data.activities.filter((a) => a.centre === 'lekef' && EH.q.activityStatus(a) === 'overdue').length);
+await page.click('#main .table tr:nth-child(3) .st-chip.bad'); await page.waitForTimeout(100);
+check('Clicking a figure opens the filtered list', (await ev(() => EH.ui.route)) === 'activites' && (await page.$$('#main .table tbody tr')).length === lekefOverdue && (await ev(() => EH.ui.f['act.status'])) === 'overdue', String(lekefOverdue));
+const attCell = await ev(() => Math.round(EH.q.attendance(EH.store.data, ['djerba'], EH.q.lastClosedPeriod()).rate));
+await page.goto(URL + '#pilotage'); await page.waitForTimeout(100);
+check('Attendance per centre matches the selector', (await page.textContent('#main .table tr:nth-child(4)')).includes(attCell + ' %'), String(attCell));
+check('New alert types listed (speaker J-3, late activity report)', /Intervenant non confirmé \(J-3\)/.test(await page.textContent('#main')) && /Rapport d'activité en retard/.test(await page.textContent('#main')));
+check('Six-month trend explains months without data', /Mois sans donnée non tracés|Évolution/.test(await page.textContent('#rate-charts')));
+check('Coverage trend no longer starts at 0 %', await ev(() => { const d = EH.store.data; return ['2026-06', '2026-07', '2026-08', '2026-09'].every((p) => (EH.q.kpis(d, null, p).coverage || 0) > 50); }));
+
+/* ---------- 14. Défi 2: interview and committee before the selection decision (PBI-23) ---------- */
+await as('u-djerba');
+const cand = await ev(() => EH.store.data.entrepreneurs.find((e) => e.centre === 'djerba' && e.stage === 'candidat' && !e.interview).id);
+check('Committee refused before the interview', (await ev((id) => EH.act.recordCommittee(id, { date: EH.TODAY, opinion: 'favorable', score: 4, comment: 'x' }).ok, cand)) === false);
+await ev((id) => EH.openDrawer('ent', { id }), cand);
+check('Profile shows the selection path', /Parcours de sélection/.test(await page.textContent('.drawer')));
+await page.click('.drawer-tools [data-action=sel-interview]'); await page.waitForTimeout(60);
+await page.click('.modal button[type=submit]'); await page.waitForTimeout(60);
+check('Interview needs a score and a comment', /note de 1 à 5/.test(await page.textContent('.modal')) && /commentaire est obligatoire/i.test(await page.textContent('.modal')));
+await page.check('.modal input[name=score][value="4"]');
+await page.fill('.modal [name=comment]', 'Porteuse motivée, marché à tester.');
+await page.click('.modal button[type=submit]'); await page.waitForTimeout(80);
+await page.click('.drawer-tools [data-action=sel-committee]'); await page.waitForTimeout(60);
+await page.check('.modal input[name=opinion][value=favorable]'); await page.check('.modal input[name=score][value="5"]');
+await page.fill('.modal [name=comment]', 'Avis favorable du comité.');
+await page.click('.modal button[type=submit]'); await page.waitForTimeout(80);
+const selTxt = await page.textContent('.drawer');
+check('Interview and committee in the timeline', /Entretien de sélection · 4\/5/.test(selTxt) && /Avis du comité : Favorable · 5\/5/.test(selTxt));
+await page.click('.drawer-tools [data-action=select-decision]'); await page.waitForTimeout(60);
+check('Decision modal recalls the committee opinion', /Avis du comité : Favorable/.test(await page.textContent('.modal')));
+await ev(() => { EH.closeModal(); EH.closeDrawer(); });
+check('Future interview date refused', (await ev(() => { const e = EH.store.data.entrepreneurs.find((x) => x.centre === 'djerba' && x.stage === 'candidat' && !x.interview); return e ? EH.act.recordInterview(e.id, { date: '2026-12-01', score: 3, comment: 'x' }).errors.date : 'none'; })) !== undefined);
+
+/* ---------- 15. older save upgraded, other défis untouched ---------- */
+const upgraded = await ev(() => { const d = JSON.parse(JSON.stringify(EH.store.data)); delete d.activityReports; localStorage.setItem('elife-hub:v5', JSON.stringify({ data: d, session: { userId: 'u-pmo' } })); EH.store.load(); return Array.isArray(EH.store.data.activityReports); });
+check('Save without activity reports is upgraded on load', upgraded);
+await ev(() => { localStorage.clear(); EH.store.load(); EH.render(); });
+await page.reload(); await page.waitForTimeout(150);
+await as('u-pmo');
+const pmoNav2 = await page.$$eval('.sidebar .nav-item', (n) => n.map((x) => x.textContent.trim()).join('|'));
+check('Défis 3, 5, 7 pages still in the menu', /Alertes/.test(pmoNav2) && /Partenaires/.test(pmoNav2) && /Connaissances/.test(pmoNav2), pmoNav2);
+for (const w of [390, 820]) {
+  await page.setViewportSize({ width: w, height: 900 });
+  await page.goto(URL + '#pilotage'); await page.waitForTimeout(100);
+  check(`No horizontal scroll PMO dashboard (new columns) @${w}`, (await ev(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0);
+}
 await page.setViewportSize({ width: 1440, height: 900 });
 
 check('No console errors', errors.length === 0, errors.slice(0, 3).join(' | '));

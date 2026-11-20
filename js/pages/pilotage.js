@@ -15,6 +15,7 @@
   /* ---------- rate charts ---------- */
   const RATES = [
     { id: 'execution', label: 'Exécution des activités', short: 'Exécution' },
+    { id: 'attendance', label: 'Taux de présence', short: 'Présence' },
     { id: 'coverage', label: 'Couverture coaching', short: 'Couverture' },
     { id: 'abandon', label: "Taux d'abandon", short: 'Abandon', invert: true },
     { id: 'reporting', label: 'Remise des rapports', short: 'Remise' },
@@ -59,7 +60,7 @@
     const dots = known.map((o) => `<circle cx="${x(o.i)}" cy="${y(o.v)}" r="4" class="pt"><title>${EH.fmtMonth(o.p)} : ${pct(o.v)}</title></circle><text x="${x(o.i)}" y="${y(o.v) - 9}" class="pt-label" text-anchor="middle">${Math.round(o.v)}</text>`).join('');
     const aria = pts.map((o) => `${EH.fmtMonth(o.p)} ${o.v == null ? 'pas de donnée' : pct(o.v)}`).join(', ');
     return `<svg viewBox="0 0 ${W} ${H}" class="trend" role="img" aria-label="${esc(rate.label + ', évolution : ' + aria)}">${grid}${area ? `<path d="${area}" class="area"/>` : ''}${path ? `<path d="${path}" class="line"/>` : ''}${dots}${labels}</svg>
-      ${known.length ? '' : '<p class="muted xs">Pas de donnée sur les six derniers mois.</p>'}<p class="muted xs" style="margin-top:4px">Six centres réunis · chiffres provisoires tant que les rapports ne sont pas validés.</p>`;
+      ${known.length ? (known.length < ps.length ? `<p class="muted xs">Mois sans donnée non tracés (${ps.filter((p, i) => !known.some((o) => o.i === i)).map((p) => EH.fmtDate(p + '-01').split(EH.NBSP)[1]).join(', ')}).</p>` : '') : '<p class="muted xs">Pas de donnée sur les six derniers mois.</p>'}<p class="muted xs" style="margin-top:4px">Six centres réunis · chiffres provisoires tant que les rapports ne sont pas validés.</p>`;
   };
 
   const rateCharts = (d, period, k) => {
@@ -87,35 +88,45 @@
         `${k.validated ? 'Chiffres validés' : `Chiffres provisoires : ${k.approvedCount} centre${k.approvedCount > 1 ? 's' : ''} sur 6 validé${k.approvedCount > 1 ? 's' : ''}`} pour ${EH.fmtMonth(period).toLowerCase()}. Survolez ${I('info')} pour la formule de chaque indicateur.`,
         periodSeg('pil.period') + C.btn('Copier l\'export CSV', { action: 'export-csv', icon: 'copy', data: { period } }));
 
+      const goTo = (route, filters, html, label, cls = '') => `<button type="button" class="cell-link ${cls}" ${C.on('go', { route, filters: JSON.stringify(filters) })} aria-label="${esc(label)}" title="${esc(label)}">${html}</button>`;
       const rows = d.centres.map((c) => {
         const kc = Q.kpis(d, c.id, period);
         const r = Q.report(d, c.id, Q.lastClosedPeriod());
         const st = Q.reportStatus(r);
         const officer = Q.user(d, c.officer);
+        const acts = d.activities.filter((a) => a.centre === c.id), byS = EH.groupCount(acts, Q.activityStatus);
+        const upcoming = (byS.draft || 0) + (byS.planned || 0) + (byS.confirmed || 0);
+        const chip = (n, label, status, cls) => goTo('activites', { 'act.centre': c.id, 'act.status': status, 'act.view': 'list', 'act.prog': '', 'act.q': '' }, `<b class="num">${n}</b> ${label}`, `${c.name} : ${n} ${label}`, 'st-chip ' + cls + (n ? '' : ' zero'));
+        const att = Q.attendance(d, [c.id], period);
+        const arSub = acts.filter((a) => Q.activityReportStatus(d, a) === 'submitted').length, arLate = acts.filter((a) => Q.activityReportLate(d, a)).length;
         return {
           cls: 'clickable', attrs: `${C.on('open-centre', { id: c.id })} tabindex="0"`,
           cells: [
             `<span class="strong nowrap">${esc(c.name)}</span><span class="sub nowrap">${esc(officer.name)}</span>`,
             C.stageBar(kc.byStage),
             `<span class="num">${kc.active ?? '—'}</span>`,
+            `<div class="st-chips">${chip(byS.done || 0, 'réalisées', 'done', 'ok')}${chip(upcoming, 'à venir', 'upcoming', 'info')}${chip(byS.overdue || 0, 'à clôturer', 'overdue', 'bad')}${chip(byS.cancelled || 0, 'annulées', 'cancelled', '')}</div>`,
             `<span class="${tone(kc.execution, 80, 60)}">${pctTxt(kc.execution)}</span>${C.meter(kc.execution)}`,
+            att.rate == null ? '<span class="muted">Pas de donnée</span>' : goTo('activites', { 'act.centre': c.id, 'act.status': 'done', 'act.view': 'list', 'act.prog': '', 'act.q': '' }, `<span class="${tone(att.rate, 80, 60)}">${pctTxt(att.rate)}</span>${C.meter(att.rate)}`, `${c.name} : présence ${Math.round(att.rate)} %, ${att.present} présences sur ${att.expected} attendus`),
             `<span class="${tone(kc.coverage, 80, 60)}">${pctTxt(kc.coverage)}</span>${C.meter(kc.coverage)}`,
-            `${pctTxt(kc.abandon)}${C.meter(kc.abandon, true)}`,
+            `${arSub ? goTo('rapports', { 'rep.ar': 'submitted' }, `<b class="num">${arSub}</b> à valider`, `${c.name} : ${arSub} rapport(s) d'activité à valider`, 'st-chip accent') : ''}${arLate ? goTo('alertes', { 'al.type': 'areport', 'al.centre': c.id }, `<b class="num">${arLate}</b> en retard`, `${c.name} : ${arLate} rapport(s) d'activité en retard`, 'st-chip bad') : ''}${!arSub && !arLate ? '<span class="muted">—</span>' : ''}`,
             C.statusBadge(EH.REF.reportStatus, st)
           ]
         };
       });
       const comparison = C.panel({
-        title: 'Comparaison des centres', actions: `<span class="muted xs hide-sm">Cliquez sur un centre pour le détail</span>`,
-        body: C.table({ caption: 'Comparaison des six centres', cols: [{ label: 'Centre' }, { label: 'Répartition par étape', cls: 'hide-sm' }, { label: 'Actifs', cls: 'num' }, { label: 'Exécution', cls: 'num' }, { label: 'Couverture', cls: 'num' }, { label: 'Abandon', cls: 'num hide-md' }, { label: 'Rapport ' + EH.fmtMonth(Q.lastClosedPeriod()).split(' ')[0].toLowerCase() }], rows }),
-        foot: C.stageLegend() + `<p class="muted xs" style="margin-top:6px">Les chiffres d'un centre deviennent officiels quand son rapport est validé.</p>`
+        title: 'Comparaison des centres', actions: `<span class="muted xs hide-sm">Cliquez sur un chiffre pour la liste, sur un centre pour le détail</span>`,
+        body: C.table({ caption: 'Comparaison des six centres', cols: [{ label: 'Centre' }, { label: 'Répartition par étape', cls: 'hide-md' }, { label: 'Actifs', cls: 'num' }, { label: 'Activités par état' }, { label: 'Exécution', cls: 'num hide-sm' }, { label: `Présence ${C.info(EH.REF.kpis.attendance.formula)}`, cls: 'num' }, { label: 'Couverture', cls: 'num hide-sm' }, { label: "Rapports d'activité" }, { label: 'Rapport ' + EH.fmtMonth(Q.lastClosedPeriod()).split(' ')[0].toLowerCase() }], rows }),
+        foot: C.stageLegend() + `<p class="muted xs" style="margin-top:6px">Les chiffres d'un centre deviennent officiels quand son rapport est validé. Activités par état : toutes les activités du centre. Le taux d'abandon par centre est dans « Taux en graphiques ».</p>`
       });
+      const arToValidate = (d.activityReports || []).filter((r) => r.status === 'submitted');
 
       const validateRows = [
         ...toValidate.map((r) => `<div class="list-row">${C.ico('send', 'info')}<div class="body"><div class="title">Rapport ${esc(EH.fmtMonth(r.period).toLowerCase())} · ${esc(Q.centreName(d, r.centre))}</div><div class="meta">Soumis le ${EH.fmtDateTime(r.submitted)}${r.comment ? ' · « ' + esc(r.comment.slice(0, 60)) + (r.comment.length > 60 ? '…' : '') + ' »' : ''}</div></div><div class="row-actions">${C.btn('Examiner', { action: 'open-report', data: { id: r.id }, variant: 'primary', size: 'sm' })}</div></div>`),
+        ...arToValidate.map((r) => { const a = Q.activity(d, r.activityId); return `<div class="list-row">${C.ico('file', 'accent')}<div class="body"><div class="title">Rapport d'activité · ${esc(a.title)} · ${esc(Q.centreName(d, r.centre))}</div><div class="meta">Soumis le ${EH.fmtDateTime(r.submittedAt)} · ${a.attendees.length}/${a.expected} présents</div></div><div class="row-actions">${C.btn('Examiner', { action: 'open-activity-report', data: { id: a.id }, variant: 'primary', size: 'sm' })}</div></div>`; }),
         ...corrections.map((c) => `<div class="list-row">${C.ico('edit', 'warn')}<div class="body"><div class="title">Correction demandée · ${esc(Q.centreName(d, c.centre))}</div><div class="meta">${esc(c.text)}</div></div><div class="row-actions">${C.btn('Traiter', { action: 'open-report', data: { id: c.report }, size: 'sm' })}</div></div>`)
       ].join('');
-      const validate = C.panel({ title: 'À valider', count: toValidate.length + corrections.length, body: validateRows || C.empty({ title: 'Rien à valider', text: 'Les rapports soumis par les centres apparaîtront ici.' }) });
+      const validate = C.panel({ title: 'À valider', count: toValidate.length + corrections.length + arToValidate.length, body: validateRows || C.empty({ title: 'Rien à valider', text: 'Les rapports soumis par les centres apparaîtront ici.' }) });
 
       const counts = EH.groupCount(alerts, (a) => a.type);
       const alertRows = Object.entries(Q.ALERT_TYPES).map(([t, def]) => {
@@ -125,7 +136,7 @@
       }).join('');
       const alertPanel = C.panel({ title: 'Alertes', count: alerts.length, actions: `<a href="#alertes" class="btn ghost sm">Tout voir</a>`, body: alertRows });
 
-      return head + EH.kpiStrip(k) + `<div style="margin-top:var(--s-4)">${rateCharts(d, period, k)}</div>` + `<div class="grid-2" style="margin-top:var(--s-4)">${comparison}<div class="stack">${validate}${alertPanel}</div></div>`;
+      return head + EH.kpiStrip(k) + `<div style="margin-top:var(--s-4)">${rateCharts(d, period, k)}</div>` + `<div style="margin-top:var(--s-4)">${comparison}</div><div class="grid-even" style="margin-top:var(--s-4)">${validate}${alertPanel}</div>`;
     }
   };
 
@@ -143,6 +154,7 @@
         <dt>Répartition</dt><dd>${C.stageBar(k.byStage)}<span class="muted xs">${EH.REF.stages.map((s) => `${s.short} ${k.byStage[s.id]}`).join(' · ')} · Abandon ${k.byStage.abandon}</span></dd>
         <dt>Exécution des activités</dt><dd class="num">${n(k.execution)}</dd>
         <dt>Couverture coaching</dt><dd class="num">${n(k.coverage)}</dd>
+        <dt>Taux de présence</dt><dd class="num">${n(k.attendance)}</dd>
         <dt>Taux d'abandon</dt><dd class="num">${n(k.abandon)}</dd>
         <dt>Séances tenues</dt><dd class="num">${k.sessions}</dd>
         <dt>Remise des rapports</dt><dd class="num">${n(k.reporting)}</dd>

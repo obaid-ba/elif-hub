@@ -104,16 +104,19 @@ Le bénéficiaire ne voit jamais d'autres bénéficiaires, d'autres centres, d'i
 
 Le backlog final (26 PBI, après l'entretien client) est intégré par phases au prototype. Décisions retenues sur les conflits : statut « Confirmée » ajouté sans retirer les statuts existants ; une activité sans intervenant reste possible (« Intervenant à trouver ») ; valideur des rapports d'activité configurable par programme (PMO par défaut) ; documents stockés dans le navigateur et liens ; rôle Intervenant en lecture seule ; un seul script de démonstration.
 
-| Phase | Contenu | État |
-|---|---|---|
-| 1 · Données | Créneau (heure + durée en minutes), salle, staff, budget, équipements, programme du jour, supports, lien en ligne, contact, participant 1-1, statut de l'intervenant ; salles par centre ; migration v4 → v5 | Fait |
-| 2 · Planification (PBI-04 à 07) | Types « Atelier en ligne » et « Session 1-1 », cohorte obligatoire, heure ; vue Semaine ; couleur « Confirmée » ; conflits de salle, d'intervenant et de staff avertis avant l'enregistrement, « Planifier quand même » inscrit au journal, alerte « Conflit de planning » ; fiche d'activité complète (contenu, lien Meet/Zoom, contact, budget) ; une Session 1-1 réalisée crée la séance de coaching | Fait |
-| 3 · Intervenants (PBI-09 à 12) | Expertise, catégories, Proposé → Confirmé / Refusé, alerte J-3, recherche, historique, rôle Intervenant | À faire |
-| 4 · Participants (PBI-08, 13 à 15) | Rappels J-1 tracés (n8n optionnel), confirmation de venue, consentement | À faire |
-| 5 · Documents (PBI-16 à 18) | Onglet Documents, bibliothèque de modèles, pièces obligatoires | À faire |
-| 6 · Rapport d'activité (PBI-19, 20) | Pré-rempli, soumission, validation, verrou ; alimente le rapport mensuel | À faire |
-| 7 · Pilotage (PBI-21, 22) | Taux de présence, pièces manquantes, nouvelles alertes | À faire |
-| 8 · Démo (PBI-25, 26) | Données et script uniques | À faire |
+| Bloc | Ce qui est livré |
+|---|---|
+| Données (PBI-25) | Créneau (heure + durée), salle, staff, budget, équipements, programme du jour, supports, lien en ligne, contact, participant 1-1 ; salles par centre ; historique des séances depuis juin |
+| Planification (PBI-04 à 07) | Types « Atelier en ligne » et « Session 1-1 », cohorte obligatoire ; vues Liste, Semaine, Mois ; conflits de salle, d'intervenant et de staff avertis avant l'enregistrement ; fiche d'activité complète |
+| Intervenant (PBI-10) | Proposé → **Confirmé** ou **Refusé** depuis la fiche ; un refus repasse l'activité en « Intervenant à trouver » (motif conservé) ; non confirmé à J-3 → alerte chargé et PMO ; chaque changement journalisé |
+| Rappel (PBI-08) | « Envoyer le rappel J-1 » aux participants de la cohorte et à l'intervenant, simulé et tracé sur l'activité (date, destinataires) ; refusé pour une activité annulée ; point « Aujourd'hui » la veille |
+| Présence (PBI-13) | Clôture avec la cohorte pré-cochée, taux de présence sur la fiche, la liste, le rapport mensuel et le tableau de bord |
+| Sélection (PBI-23) | Candidature → **Entretien** (date, note sur 5, commentaire) → **Avis du comité** (favorable / réservé / défavorable, note, commentaire) → décision ; visible dans « Parcours de sélection » et la chronologie |
+| Rapport d'activité (PBI-19/20) | Pré-rempli depuis la fiche (présents, taux, intervenant, budget, rapports bénéficiaires) ; le chargé ajoute difficultés et besoins d'appui, enregistre ou soumet ; le PMO valide (chiffres figés, verrouillé) ou renvoie avec motif ; attendu sous 7 jours pour les activités réalisées depuis le 1er novembre 2026 |
+| Pilotage (PBI-21/22) | Comparaison des centres : activités par état, exécution, présence, couverture, rapports d'activité à valider / en retard ; chaque chiffre ouvre la liste filtrée ; jauge « Présence » ; alertes « Intervenant non confirmé (J-3) » et « Rapport d'activité en retard » |
+| Démo (PBI-26) | Script de 5 minutes dans [DEMO.md](DEMO.md) |
+
+Prochaines étapes envisagées : envoi réel des rappels et résumé quotidien par e-mail (n8n), confirmation de venue des participants et consentement (PBI-14, 15), onglet Documents et bibliothèque de modèles (PBI-16 à 18), comptes rendus de réunion dont les décisions deviennent des tâches.
 
 Cas de démonstration déjà présents (PBI-25) : conflit de salle à Djerba le 24 novembre (« Atelier étude de marché » 16 h et « Atelier marketing digital » 17 h, même salle) et intervenant non confirmé à Tozeur (« Formation comptabilité de base », 21 novembre).
 

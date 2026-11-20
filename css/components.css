@@ -305,7 +305,7 @@
 .meter .fill.warn, .hbar-fill.warn { background: #D97706; }
 .meter .fill.bad, .hbar-fill.bad { background: var(--bad); }
 .table td.num .meter { margin-left: auto; max-width: 72px; }
-.rings { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s-2); margin-bottom: var(--s-4); }
+.rings { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s-2); margin-bottom: var(--s-4); }
 .ring-card { position: relative; display: grid; justify-items: center; gap: 2px; padding: var(--s-2) var(--s-1) var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--ink); cursor: pointer; transition: border-color var(--ease), background var(--ease); }
 .ring-card:hover { background: var(--hover); }
 .ring-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -393,3 +393,18 @@
   .panel-head .page-actions { min-width: 0; max-width: 100%; }
   .panel-head .seg { max-width: 100%; overflow-x: auto; }
 }
+
+/* ---------- PMO comparison: clickable figures ---------- */
+.grid-even { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-4); align-items: start; }
+@media (max-width: 1100px) { .grid-even { grid-template-columns: minmax(0, 1fr); } }
+.cell-link { display: inline-block; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: inherit; cursor: pointer; border-radius: var(--r-sm); }
+.cell-link:hover { text-decoration: underline; }
+.cell-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.st-chips { display: grid; grid-template-columns: repeat(2, max-content); gap: 2px 4px; }
+.st-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; background: var(--sunken); color: var(--ink-2); font-size: var(--fs-xs); white-space: nowrap; margin: 1px 2px 1px 0; }
+.st-chip.ok { background: var(--ok-bg); color: var(--ok); } .st-chip.info { background: var(--info-bg); color: var(--info); }
+.st-chip.bad { background: var(--bad-bg); color: var(--bad); } .st-chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
+.st-chip.zero { opacity: .55; }
+.st-chip:hover { text-decoration: none; filter: brightness(.96); }
+.score-cards { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.sel-steps .step { min-width: 0; }

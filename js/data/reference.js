@@ -73,6 +73,7 @@
       sessions: { label: 'Séances tenues', formula: 'Séances de coaching et de mentorat saisies sur la période.' },
       partners: { label: 'Partenaires actifs', formula: 'Partenaires avec une collaboration en cours ou une intervention depuis moins de 6 mois.' },
       reporting: { label: 'Remise des rapports', formula: 'Rapports bénéficiaires obligatoires remis à temps (premier envoi avant l’échéance) ÷ rapports dus, pour les activités de la période. Un rapport est dû quand son échéance est passée ou qu’il a été remis.' },
+      attendance: { label: 'Taux de présence', formula: 'Présences cochées ÷ participants attendus, sur les activités réalisées de la période.' },
       engagement: { label: 'Engagement des bénéficiaires', formula: '(Présences aux activités réalisées + rapports remis à temps) ÷ (activités réalisées attendues + rapports dus), cumulés sur les bénéficiaires dont l’espace est activé.' }
     },
     /** Incubation follow-up: expected length of each phase, in days (alert when exceeded). */
@@ -84,6 +85,18 @@
       validated: { label: 'Validé', tone: 'ok', icon: 'checkCircle' }
     },
     fundingKinds: ['Subvention', "Prêt d'honneur", 'Prix / concours', 'Prise de participation', 'Matériel / en nature'],
+    /** Activity report (PBI-19/20): expected for activities done from this date, within N days. Validator = PMO by default. */
+    activityReportStatus: {
+      todo: { label: 'À rédiger', tone: 'info', icon: 'edit' },
+      draft: { label: 'Brouillon', tone: '', icon: 'edit' },
+      submitted: { label: 'À valider', tone: 'accent', icon: 'send' },
+      returned: { label: 'Renvoyé', tone: 'warn', icon: 'undo' },
+      validated: { label: 'Validé', tone: 'ok', icon: 'lock' }
+    },
+    ACTIVITY_REPORT_START: '2026-11-01',
+    ACTIVITY_REPORT_DAYS: 7,
+    SPEAKER_CONFIRM_DAYS: 3,
+    committeeOpinions: [{ id: 'favorable', label: 'Favorable' }, { id: 'reserve', label: 'Réservé' }, { id: 'defavorable', label: 'Défavorable' }],
     INACTIVE_MONTHS: 6,
     RISK_DAYS: 30,
     OVERDUE_GRACE: 2

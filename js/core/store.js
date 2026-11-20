@@ -32,6 +32,7 @@
     if (saved && saved.data && saved.data.version === 5) { store.data = saved.data; store.session = saved.session || store.session; }
     else store.data = EH.seed();
     if (!store.user().id) store.session = { userId: 'u-pmo' };
+    if (!store.data.activityReports) { try { EH.seedWorkflow(store.data); } catch (e) { store.data.activityReports = []; } }
     if (!store.data.exercises || !store.data.fundings) { try { Object.assign(store.data, EH.seedIncubation(store.data)); } catch (e) { store.data.exercises = store.data.exercises || []; store.data.fundings = store.data.fundings || []; } }
     store.ensureSnapshots();
   };
@@ -40,6 +41,7 @@
   store.ensureSnapshots = () => store.data.reports.forEach((r) => {
     if (r.status === 'approved' && !r.snapshot) r.snapshot = Q.snapshot(store.data, r.centre, r.period);
     else if (r.snapshot && !r.snapshot.reportingDetail) { const k = Q.snapshot(store.data, r.centre, r.period); ['reporting', 'reportingDetail', 'engagement', 'engagementDetail'].forEach((f) => (r.snapshot[f] = k[f])); }
+    if (r.snapshot && !r.snapshot.attendanceDetail) { const k = Q.snapshot(store.data, r.centre, r.period); r.snapshot.attendance = k.attendance; r.snapshot.attendanceDetail = k.attendanceDetail; }
   });
 
   /* ---------- session & permissions (section 3 of the PRD) ---------- */
@@ -181,6 +183,41 @@
     return commit({ ok: true, item: a });
   };
 
+  /* ---- PBI-10: speaker Proposé → Confirmé / Refusé ---- */
+  A.setSpeakerStatus = (id, status, reason) => {
+    const a = Q.activity(store.data, id);
+    if (!a || !can.writeOperational(a.centre)) return fail("Seul le chargé du centre gère l'intervenant de ses activités.");
+    if (a.status !== 'planned') return fail("L'activité n'est plus prévue.");
+    if (!a.facilitator) return fail("Aucun intervenant n'est assigné.");
+    if (!['confirmed', 'refused'].includes(status)) return fail('Statut inconnu.');
+    if (locked(a.centre, a.date)) return fail(LOCK_MSG);
+    const name = (Q.partner(store.data, a.facilitator) || {}).name || 'Intervenant';
+    if (status === 'refused') {
+      a.speakerHistory = (a.speakerHistory || []).concat({ partner: a.facilitator, status: 'refused', at: EH.nowIso(), reason: String(reason || '').trim() });
+      a.facilitator = null; a.facilitatorStatus = null;
+      store.log('Intervenant refusé', a.title, `${name} a décliné${reason ? ' · ' + String(reason).trim() : ''} · intervenant à trouver`, a.centre, { before: 'Proposé', after: 'Refusé' });
+    } else {
+      const before = a.facilitatorStatus === 'confirmed' ? 'Confirmé' : 'Proposé';
+      a.facilitatorStatus = 'confirmed';
+      a.speakerHistory = (a.speakerHistory || []).concat({ partner: a.facilitator, status: 'confirmed', at: EH.nowIso() });
+      store.log('Intervenant confirmé', a.title, name, a.centre, { before, after: 'Confirmé' });
+    }
+    return commit({ ok: true, item: a });
+  };
+  /* ---- PBI-08: J-1 reminder (simulated, traced on the activity) ---- */
+  A.sendReminder = (id) => {
+    const a = Q.activity(store.data, id);
+    if (!a || !can.writeOperational(a.centre)) return fail('Seul le chargé du centre envoie les rappels de ses activités.');
+    if (a.status === 'cancelled') return fail('Activité annulée : aucun rappel envoyé.');
+    if (a.status !== 'planned' || a.date < EH.TODAY) return fail('Le rappel ne concerne que les activités à venir.');
+    const rc = Q.reminderRecipients(store.data, a);
+    if (!rc.count) return fail('Aucun destinataire : ni participant ni intervenant.');
+    const rem = { at: EH.nowIso(), by: store.session.userId, participants: rc.participants.length, speaker: rc.speaker ? rc.speaker.name : null, channel: 'E-mail' };
+    a.reminders = (a.reminders || []).concat(rem);
+    store.log('Rappel envoyé', a.title, `${EH.plural(rc.participants.length, 'participant')}${rc.speaker ? ' + ' + rc.speaker.name : ''} · ${EH.fmtDay(a.date)}`, a.centre);
+    return commit({ ok: true, item: a, reminder: rem });
+  };
+
   /* ---- entrepreneurs (FR-02) ---- */
   /** Field checks shared by the manual form and the spreadsheet import. */
   const candidateErrors = (f) => {
@@ -271,6 +308,37 @@
     const x = newCandidate(f, centre);
     store.data.entrepreneurs.push(x);
     store.log('Candidat inscrit', x.name, override ? `Doublon forcé : ${override.reason}` : x.idea, centre);
+    return commit({ ok: true, item: x });
+  };
+  /** PBI-23: interview then committee opinion, between application and selection decision. */
+  const scoreOf = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null; };
+  A.recordInterview = (id, f) => {
+    const x = Q.ent(store.data, id);
+    if (!x || !can.writeOperational(x.centre)) return fail('Action réservée au chargé du centre.');
+    if (x.stage !== 'candidat') return fail("L'entretien concerne uniquement les candidats.");
+    const e = required(f, [['date', 'La date'], ['comment', 'Le commentaire']]);
+    if (f.date && f.date > EH.TODAY) e.date = "L'entretien ne peut pas être daté dans le futur.";
+    if (scoreOf(f.score) == null) e.score = 'Choisissez une note de 1 à 5.';
+    if (Object.keys(e).length) return fail(e);
+    x.interview = { date: f.date, score: scoreOf(f.score), comment: f.comment.trim(), by: store.session.userId };
+    x.version++;
+    store.log('Entretien saisi', x.name, `Note ${x.interview.score}/5 · ${x.interview.comment}`, x.centre);
+    return commit({ ok: true, item: x });
+  };
+  A.recordCommittee = (id, f) => {
+    const x = Q.ent(store.data, id);
+    if (!x || !can.writeOperational(x.centre)) return fail('Action réservée au chargé du centre.');
+    if (x.stage !== 'candidat') return fail("L'avis du comité concerne uniquement les candidats.");
+    if (!x.interview) return fail("Saisissez d'abord l'entretien.");
+    const e = required(f, [['date', 'La date'], ['opinion', "L'avis"], ['comment', 'Le commentaire']]);
+    if (f.date && f.date > EH.TODAY) e.date = "L'avis ne peut pas être daté dans le futur.";
+    if (f.date && x.interview && f.date < x.interview.date) e.date = "L'avis du comité suit l'entretien.";
+    if (f.opinion && !R.committeeOpinions.some((o) => o.id === f.opinion)) e.opinion = 'Avis inconnu.';
+    if (scoreOf(f.score) == null) e.score = 'Choisissez une note de 1 à 5.';
+    if (Object.keys(e).length) return fail(e);
+    x.committee = { date: f.date, opinion: f.opinion, score: scoreOf(f.score), comment: f.comment.trim(), by: store.session.userId };
+    x.version++;
+    store.log('Avis du comité', x.name, `${R.committeeOpinions.find((o) => o.id === f.opinion).label} · ${x.committee.score}/5`, x.centre);
     return commit({ ok: true, item: x });
   };
   A.decideSelection = (id, f) => {
@@ -611,6 +679,41 @@
     if (approve) { rep.status = 'returned'; rep.reviewComment = 'Correction acceptée : ' + c.text; rep.reviewedBy = store.session.userId; rep.reviewedAt = EH.nowIso(); rep.version++; }
     store.log(approve ? 'Correction de rapport acceptée' : 'Correction de rapport refusée', objectOf(e, a), approve ? `${BR.validated.label} → ${BR.returned.label}` : '', a.centre, approve ? { before: BR.validated.label, after: BR.returned.label } : null);
     return commit({ ok: true, item: rep });
+  };
+
+  /* ---- PBI-19/20: activity report, pre-filled, submitted by the officer, validated by the PMO ---- */
+  const AR = R.activityReportStatus;
+  const AR_CONFLICT = "Ce rapport d'activité a été modifié entre-temps. Fermez la fiche et rouvrez-la.";
+  A.saveActivityReport = (activityId, f, submit, version) => {
+    const a = Q.activity(store.data, activityId);
+    if (!a || !can.writeOperational(a.centre)) return fail("Seul le chargé du centre rédige le rapport de ses activités.");
+    if (a.status !== 'done') return fail("Le rapport d'activité se rédige une fois l'activité réalisée.");
+    let r = Q.activityReport(store.data, a.id);
+    if (version != null && version !== '' && +version !== (r ? r.version : 0)) return fail(AR_CONFLICT);
+    if (r && (r.status === 'submitted' || r.status === 'validated')) return fail(r.status === 'validated' ? 'Rapport validé : il est verrouillé.' : 'Rapport en cours de validation par le PMO.');
+    const difficulties = String(f.difficulties || '').trim(), needs = String(f.needs || '').trim();
+    if (submit) { const e = {}; if (!difficulties) e.difficulties = 'Indiquez les difficultés rencontrées (ou « Aucune »).'; if (!needs) e.needs = "Indiquez les besoins d'appui (ou « Aucun »)."; if (Object.keys(e).length) return fail(e); }
+    const before = r ? AR[r.status].label : AR.todo.label;
+    if (!r) { r = { id: EH.uid('ar'), activityId: a.id, centre: a.centre, status: 'draft', difficulties: '', needs: '', submittedAt: null, reviewedAt: null, reviewedBy: null, returnReason: null, snapshot: null, version: 0 }; store.data.activityReports.push(r); }
+    r.difficulties = difficulties; r.needs = needs; r.version++;
+    if (submit) { r.status = 'submitted'; r.submittedAt = EH.nowIso(); r.returnReason = r.returnReason || null; }
+    else r.status = r.status === 'returned' ? 'returned' : 'draft';
+    if (submit || before !== AR[r.status].label) store.log(submit ? "Rapport d'activité soumis" : "Rapport d'activité enregistré", a.title, `${before} → ${AR[r.status].label}`, a.centre, { before, after: AR[r.status].label });
+    return commit({ ok: true, item: r });
+  };
+  A.reviewActivityReport = (id, decision, reason, version) => {
+    const r = (store.data.activityReports || []).find((x) => x.id === id);
+    if (!r) return fail('Rapport introuvable.');
+    if (!can.validateReport()) return fail("Seul le PMO valide les rapports d'activité.");
+    if (version != null && version !== '' && +version !== r.version) return fail(AR_CONFLICT);
+    if (r.status !== 'submitted') return fail('Seul un rapport soumis peut être validé ou renvoyé.');
+    if (decision === 'return' && !String(reason || '').trim()) return fail({ reason: 'Le motif du renvoi est obligatoire.' });
+    const a = Q.activity(store.data, r.activityId), before = AR.submitted.label;
+    r.status = decision === 'validate' ? 'validated' : 'returned';
+    r.reviewedAt = EH.nowIso(); r.reviewedBy = store.session.userId; r.returnReason = decision === 'return' ? String(reason).trim() : null; r.version++;
+    if (r.status === 'validated') r.snapshot = Q.activityReportFigures(store.data, a);
+    store.log(decision === 'validate' ? "Rapport d'activité validé" : "Rapport d'activité renvoyé", a.title, `${before} → ${AR[r.status].label}${r.returnReason ? ' · ' + r.returnReason : ''}`, a.centre, { before, after: AR[r.status].label });
+    return commit({ ok: true, item: r });
   };
 
   /* ---- incubation follow-up: exercises (become actions for the beneficiary) and funders linked to projects ---- */

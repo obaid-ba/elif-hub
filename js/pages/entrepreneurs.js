@@ -47,7 +47,7 @@
           last ? `<span class="${rk ? 't-bad strong' : ''}">${EH.relDays(last.date)}</span>${rk ? '<span class="sub t-bad">À risque</span>' : ''}` : (R.activeStages.includes(e.stage) ? '<span class="t-bad strong">Aucune</span>' : '<span class="muted">—</span>'),
           next ? `<span class="truncate" style="display:block;max-width:220px">${esc(next.nextAction)}</span><span class="sub ${next.nextDue < EH.TODAY ? 't-bad' : ''}">${next.nextDue < EH.TODAY ? 'En retard · ' : ''}${EH.fmtDate(next.nextDue)}</span>` : '<span class="muted">—</span>',
           canWrite ? (e.stage === 'candidat'
-            ? C.btn('Décider', { action: 'select-decision', data: { id: e.id }, size: 'sm' })
+            ? (EH.selectionNext(e) === 'interview' ? C.btn('Entretien', { action: 'sel-interview', data: { id: e.id }, size: 'sm' }) : EH.selectionNext(e) === 'committee' ? C.btn('Avis du comité', { action: 'sel-committee', data: { id: e.id }, size: 'sm' }) : C.btn('Décider', { action: 'select-decision', data: { id: e.id }, size: 'sm' }))
             : R.activeStages.includes(e.stage) ? C.btn('', { action: 'new-session', data: { id: e.id }, icon: 'message', size: 'sm', title: `Saisir une séance pour ${e.name}` }) + ' ' + C.btn('', { action: 'change-stage', data: { id: e.id }, icon: 'arrowRight', size: 'sm', title: `Changer l'étape de ${e.name}` }) : '') : ''
         ]
       }));
@@ -64,6 +64,9 @@
   const timeline = (e) => {
     const d = S.data, items = [];
     e.history.forEach((h) => items.push({ date: h.date, icon: h.stage === 'abandon' ? 'trendDown' : 'flag', tone: h.stage === 'abandon' ? 'bad' : 'accent', what: `${h.stage === 'candidat' ? 'Candidature enregistrée' : 'Étape : ' + EH.stageLabel(h.stage)}`, sub: h.note || '' }));
+    if (e.interview) items.push({ date: e.interview.date, icon: 'message', tone: 'accent', what: `Entretien de sélection · ${e.interview.score}/5`, sub: e.interview.comment });
+    if (e.committee) items.push({ date: e.committee.date, icon: 'users', tone: e.committee.opinion === 'favorable' ? 'ok' : e.committee.opinion === 'defavorable' ? 'bad' : 'warn', what: `Avis du comité : ${(R.committeeOpinions.find((o) => o.id === e.committee.opinion) || {}).label} · ${e.committee.score}/5`, sub: e.committee.comment });
+    if (e.selection) items.push({ date: e.selection.date, icon: 'flag', tone: e.selection.decision === 'selected' ? 'ok' : '', what: `Décision : ${(R.selection.find((s) => s.id === e.selection.decision) || {}).label}`, sub: e.selection.reason });
     Q.sessionsOf(d, e.id).forEach((s) => items.push({ date: s.date, icon: 'message', tone: 'info', what: `${s.type} · ${s.topic}`, sub: `Avec ${EH.partnerName(s.coach) || '—'}${s.nextAction ? ' · Prochaine action : ' + s.nextAction + ' (' + EH.fmtDate(s.nextDue) + ')' : ''}` }));
     d.activities.filter((a) => a.attendees.includes(e.id)).forEach((a) => items.push({ date: a.date, icon: 'calendar', tone: '', what: `Présent : ${a.title}`, sub: a.type }));
     return items.sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -84,6 +87,47 @@
     return `<div class="section">${head(' ' + C.badge('Provisoire', 'outline'))}<dl class="dl">${rate(all.reporting, all.onTime, all.due, 'Taux de remise', R.kpis.reporting.formula)}${rate(all.engagement, all.engagementDetail.num, all.engagementDetail.den, 'Engagement', R.kpis.engagement.formula)}</dl>${perPeriod}<div style="margin-top:8px">${rows}</div></div>`;
   };
 
+  /* ---------- PBI-23: selection path (application → interview → committee → decision) ---------- */
+  EH.selectionNext = (e) => (e.stage !== 'candidat' ? null : !e.interview ? 'interview' : !e.committee ? 'committee' : 'decision');
+  const selectionBlock = (e) => {
+    const op = e.committee && R.committeeOpinions.find((o) => o.id === e.committee.opinion);
+    const steps = [
+      { l: 'Candidature', done: true, sub: EH.fmtDate(e.history[0].date) },
+      { l: 'Entretien', done: !!e.interview, sub: e.interview ? `${EH.fmtDate(e.interview.date)} · ${e.interview.score}/5` : 'À faire' },
+      { l: 'Avis du comité', done: !!e.committee, sub: e.committee ? `${op.label} · ${e.committee.score}/5` : 'À faire' },
+      { l: 'Décision', done: !!e.selection || e.stage !== 'candidat', sub: e.selection ? (R.selection.find((s) => s.id === e.selection.decision) || {}).label : e.stage !== 'candidat' ? 'Sélectionné' : 'À prendre' }
+    ];
+    const cur = steps.findIndex((s) => !s.done);
+    return `<div class="section"><h3>Parcours de sélection</h3><div class="stepper sel-steps">${steps.map((s, i) => `<div class="step ${s.done ? 'done' : i === cur ? 'current' : ''}"><b>${s.l}</b>${esc(s.sub)}</div>`).join('')}</div>
+      ${e.interview ? `<p class="small" style="margin-top:8px"><b>Entretien :</b> ${esc(e.interview.comment)}</p>` : ''}${e.committee ? `<p class="small"><b>Comité :</b> ${esc(e.committee.comment)}</p>` : ''}</div>`;
+  };
+  const scoreField = (name, value, error) => C.radios({ name, label: 'Note sur 5', value: value != null ? String(value) : '', error, options: ['1', '2', '3', '4', '5'].map((x) => ({ value: x, label: x })) }).replace('class="radio-cards"', 'class="radio-cards score-cards"');
+  EH.modals.interview = (m) => {
+    const e = Q.ent(S.data, m.id), v = Object.assign({ date: EH.TODAY }, e.interview || {}, m.values), er = m.errors;
+    return C.modal({ title: `Entretien · ${esc(e.name)}`, form: 'interview', body: `${C.formError(er)}<p class="small">${esc(e.idea)}</p>
+      ${C.field({ name: 'date', label: "Date de l'entretien", type: 'date', required: true, value: v.date, error: er.date, max: EH.TODAY })}
+      <div style="height:12px"></div>${scoreField('score', v.score, er.score)}
+      <div style="height:12px"></div>${C.field({ name: 'comment', label: 'Commentaire', type: 'textarea', rows: 3, required: true, value: v.comment, error: er.comment, placeholder: 'Motivation, clarté du projet, points à vérifier.' })}`,
+      foot: C.btn('Annuler', { action: 'close-modal' }) + C.btn("Enregistrer l'entretien", { type: 'submit', variant: 'primary' }) });
+  };
+  EH.modals.committee = (m) => {
+    const e = Q.ent(S.data, m.id), v = Object.assign({ date: EH.TODAY }, e.committee || {}, m.values), er = m.errors;
+    return C.modal({ title: `Avis du comité · ${esc(e.name)}`, form: 'committee', body: `${C.formError(er)}<p class="small">Entretien du ${EH.fmtDate(e.interview.date)} : ${e.interview.score}/5 · ${esc(e.interview.comment)}</p>
+      ${C.radios({ name: 'opinion', label: 'Avis', value: v.opinion, error: er.opinion, options: R.committeeOpinions.map((o) => ({ value: o.id, label: o.label })) })}
+      <div style="height:12px"></div>${C.field({ name: 'date', label: 'Date du comité', type: 'date', required: true, value: v.date, error: er.date, max: EH.TODAY })}
+      <div style="height:12px"></div>${scoreField('score', v.score, er.score)}
+      <div style="height:12px"></div>${C.field({ name: 'comment', label: 'Commentaire', type: 'textarea', rows: 3, required: true, value: v.comment, error: er.comment })}`,
+      foot: C.btn('Annuler', { action: 'close-modal' }) + C.btn("Enregistrer l'avis", { type: 'submit', variant: 'primary' }) });
+  };
+  const stepForm = (fn, label) => (v) => {
+    const m = EH.ui.modal; m.values = v;
+    const res = EH.act[fn](m.id, v);
+    if (res.ok) { EH.closeModal(); EH.render(); if (EH.ui.drawer) EH.renderOverlays(); EH.toast(`${label} enregistré pour ${esc(res.item.name)}.`); }
+    else { m.errors = res.errors; EH.renderOverlays(true); }
+  };
+  EH.forms.interview = stepForm('recordInterview', 'Entretien');
+  EH.forms.committee = stepForm('recordCommittee', 'Avis du comité');
+
   EH.drawers.ent = (st) => {
     const d = S.data, e = Q.ent(d, st.id);
     if (!e) return C.drawer({ title: 'Fiche introuvable', body: C.empty({ icon: 'search', tone: '', title: 'Cette fiche n\'existe plus' }) });
@@ -94,11 +138,14 @@
     const stepper = `<div class="stepper" aria-label="Parcours">${R.stages.map((s, i) => { const dt = Q.stageDate(e, s.id); const cls = e.stage === 'abandon' ? (dt ? 'done' : '') : i < si ? 'done' : i === si ? 'current' : ''; return `<div class="step ${cls}"><b>${s.label}</b>${dt ? EH.fmtDate(dt) : '&nbsp;'}</div>`; }).join('')}</div>`;
     const dels = d.deliverables.filter((x) => x.entrepreneur === e.id);
     const tl = timeline(e);
+    const selNext = EH.selectionNext(e);
     const tools = w ? (e.stage === 'candidat'
-      ? C.btn('Décision de sélection', { action: 'select-decision', data: { id: e.id }, variant: 'primary', icon: 'flag' }) + C.btn('Abandon', { action: 'change-stage', data: { id: e.id, to: 'abandon' } })
+      ? C.btn('Entretien', { action: 'sel-interview', data: { id: e.id }, icon: 'message', variant: selNext === 'interview' ? 'primary' : '' }) + C.btn('Avis du comité', { action: 'sel-committee', data: { id: e.id }, icon: 'users', variant: selNext === 'committee' ? 'primary' : '', disabled: !e.interview }) + C.btn('Décision de sélection', { action: 'select-decision', data: { id: e.id }, variant: selNext === 'decision' ? 'primary' : '', icon: 'flag' }) + C.btn('Abandon', { action: 'change-stage', data: { id: e.id, to: 'abandon' } })
       : C.btn('Saisir une séance', { action: 'new-session', data: { id: e.id }, variant: 'primary', icon: 'message', disabled: !R.activeStages.includes(e.stage) }) + C.btn("Changer d'étape", { action: 'change-stage', data: { id: e.id }, icon: 'arrowRight' })) : '';
+    const selSteps = e.stage === 'candidat' || e.interview || e.committee ? selectionBlock(e) : '';
     const body = `
       ${stepper}
+      ${selSteps}
       ${e.stage === 'abandon' ? C.callout('bad', `Abandon le ${EH.fmtDate(Q.stageDate(e, 'abandon'))} : ${esc(e.abandonReason || 'motif non précisé')}. L'historique est conservé.`) : ''}
       ${risk ? C.callout('warn', `Aucune séance depuis ${Q.daysWithoutSession(d, e)} jours. Planifiez un échange.`) : ''}
       ${next ? `<div class="section"><h3>Prochaine action</h3><div class="panel"><div class="list-row">${C.ico('flag', next.nextDue < EH.TODAY ? 'bad' : 'accent')}<div class="body"><div class="title">${esc(next.nextAction)}</div><div class="meta ${next.nextDue < EH.TODAY ? 't-bad' : ''}">Échéance ${EH.fmtDate(next.nextDue)}${next.nextDue < EH.TODAY ? ' · en retard' : ''} · fixée le ${EH.fmtDate(next.date)}</div></div></div></div></div>` : ''}
@@ -251,7 +298,9 @@
     const e = Q.ent(S.data, m.id);
     const cohorts = S.data.cohorts.filter((c) => c.centre === e.centre);
     const v = m.values;
+    const cop = e.committee && R.committeeOpinions.find((o) => o.id === e.committee.opinion);
     return C.modal({ title: `Décision de sélection · ${esc(e.name)}`, form: 'selection', body: `${C.formError(m.errors)}
+      ${cop ? C.callout(e.committee.opinion === 'favorable' ? 'ok' : e.committee.opinion === 'defavorable' ? 'bad' : 'warn', `Avis du comité : <b>${cop.label}</b> (${e.committee.score}/5) · ${esc(e.committee.comment)}`) : C.callout('info', e.interview ? "Aucun avis du comité enregistré : vous pouvez décider maintenant ou attendre l'avis." : 'Ni entretien ni avis du comité enregistrés pour ce candidat.')}
       ${C.radios({ name: 'decision', label: 'Décision', value: v.decision, error: m.errors.decision, options: R.selection.map((s) => ({ value: s.id, label: s.label })) })}
       ${C.field({ name: 'reason', label: 'Motif', type: 'textarea', rows: 2, required: true, value: v.reason, error: m.errors.reason })}
       ${C.field({ name: 'cohort', label: 'Cohorte (si sélectionné)', type: 'select', value: v.cohort || (cohorts[0] || {}).id, error: m.errors.cohort, options: cohorts.map((c) => ({ value: c.id, label: `${c.name} · ${(Q.programme(S.data, c.programme) || {}).name || ''}` })), help: 'Sélectionné : passe en pré-incubation dans cette cohorte.' })}`,
@@ -293,6 +342,8 @@
       const restored = !id && dr && (dr.topic || dr.nextAction);
       EH.openDrawer('session', { values: id ? { entrepreneur: id } : restored ? dr : {}, restored });
     },
+    'sel-interview': (el) => EH.openModal('interview', { id: el.dataset.id }),
+    'sel-committee': (el) => { const e = Q.ent(S.data, el.dataset.id); if (!e.interview) return EH.toast("Saisissez d'abord l'entretien.", { tone: 'error' }); EH.openModal('committee', { id: el.dataset.id }); },
     'change-stage': (el) => EH.openModal('stage', { id: el.dataset.id, to: el.dataset.to }),
     'select-decision': (el) => EH.openModal('selection', { id: el.dataset.id, values: { decision: 'selected' } }),
     'set-deliverable': (el) => { const r = EH.act.setDeliverable(el.dataset.id, el.dataset.status); if (r.ok) { EH.renderOverlays(); EH.toast('Livrable mis à jour.'); } }

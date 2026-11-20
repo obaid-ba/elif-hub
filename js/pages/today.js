@@ -16,6 +16,14 @@
       const late = Q.activityStatus(a) === 'overdue';
       items.push({ sev: late ? 'bad' : 'warn', icon: 'calendar', title: `Clôturer « ${a.title} »`, meta: `${EH.fmtDay(a.date)} · ${late ? 'signalée au PMO' : 'saisissez les présences'}`, btn: ['Clôturer', 'close-activity', { id: a.id }] });
     });
+    d.activities.filter((a) => a.centre === c && Q.speakerUnconfirmed(a)).forEach((a) =>
+      items.push({ sev: EH.days(EH.TODAY, a.date) <= 1 ? 'bad' : 'warn', icon: 'handshake', title: `Faire confirmer ${EH.partnerName(a.facilitator)} · « ${a.title} »`, meta: `${EH.fmtDay(a.date)} · non confirmé à J-${EH.days(EH.TODAY, a.date)}, signalé au PMO`, btn: ['Ouvrir', 'open-activity', { id: a.id }] }));
+    d.activities.filter((a) => a.centre === c && Q.needsReminder(a)).forEach((a) =>
+      items.push({ sev: 'warn', icon: 'bell', title: `Envoyer le rappel J-1 · « ${a.title} »`, meta: `Demain ${a.time ? 'à ' + a.time : ''} · ${EH.plural(Q.reminderRecipients(d, a).count, 'destinataire')}`, btn: ['Envoyer le rappel', 'send-reminder', { id: a.id }] }));
+    d.activities.filter((a) => a.centre === c && Q.activityReportExpected(a) && ['todo', 'draft', 'returned'].includes(Q.activityReportStatus(d, a))).forEach((a) => {
+      const s = Q.activityReportStatus(d, a), late = Q.activityReportLate(d, a);
+      items.push({ sev: late || s === 'returned' ? 'bad' : 'warn', icon: 'file', title: `${s === 'returned' ? 'Corriger' : 'Rédiger'} le rapport d'activité · « ${a.title} »`, meta: s === 'returned' ? 'Renvoyé par le PMO : ' + Q.activityReport(d, a.id).returnReason : `${late ? 'En retard · ' : ''}attendu le ${EH.fmtDate(Q.activityReportDue(a))} · pré-rempli depuis la fiche`, btn: ['Ouvrir le rapport', 'open-activity-report', { id: a.id }] });
+    });
     d.activities.filter((a) => a.centre === c && a.status === 'planned' && !a.facilitator && a.date > EH.TODAY).forEach((a) =>
       items.push({ sev: 'warn', icon: 'edit', title: `Choisir l'intervenant de « ${a.title} »`, meta: `${EH.fmtDay(a.date)} · brouillon`, btn: ['Compléter', 'edit-activity', { id: a.id }] }));
     d.entrepreneurs.filter((e) => e.centre === c && Q.atRisk(d, e)).forEach((e) =>
@@ -24,8 +32,11 @@
       const s = Q.lastSession(d, e.id);
       if (s && s.nextAction && s.nextDue && s.nextDue < EH.TODAY) items.push({ sev: 'info', icon: 'flag', title: `${e.name} : « ${s.nextAction} »`, meta: `Prochaine action attendue le ${EH.fmtDate(s.nextDue)}`, btn: ['Faire le point', 'new-session', { id: e.id }] });
     });
-    d.entrepreneurs.filter((e) => e.centre === c && e.stage === 'candidat').forEach((e) =>
-      items.push({ sev: 'info', icon: 'userPlus', title: `Décision de sélection : ${e.name}`, meta: `Candidat depuis le ${EH.fmtDate(e.history[0].date)} · ${e.idea}`, btn: ['Décider', 'select-decision', { id: e.id }] }));
+    d.entrepreneurs.filter((e) => e.centre === c && e.stage === 'candidat').forEach((e) => {
+      const nx = EH.selectionNext(e);
+      const t = { interview: ['Entretien de sélection', 'Saisir l’entretien', 'sel-interview'], committee: ['Avis du comité', 'Saisir l’avis', 'sel-committee'], decision: ['Décision de sélection', 'Décider', 'select-decision'] }[nx];
+      items.push({ sev: 'info', icon: 'userPlus', title: `${t[0]} : ${e.name}`, meta: `Candidat depuis le ${EH.fmtDate(e.history[0].date)} · ${e.idea}${e.committee ? ' · avis ' + (R.committeeOpinions.find((o) => o.id === e.committee.opinion) || {}).label.toLowerCase() : ''}`, btn: [t[1], t[2], { id: e.id }] });
+    });
     d.activities.filter((a) => a.centre === c && a.status === 'done').forEach((a) => {
       const obs = Q.activityObligations(d, a), subm = obs.filter((o) => o.status === 'submitted').length;
       if (subm) items.push({ kind: 'benef', sev: 'warn', icon: 'report', title: `${EH.plural(subm, 'rapport bénéficiaire', 'rapports bénéficiaires')} à valider · « ${a.title} »`, meta: `${EH.fmtDay(a.date)} · relisez puis validez ou renvoyez`, btn: ['Examiner', 'open-activity', { id: a.id }] });
@@ -58,7 +69,7 @@
       const n = (v) => (v == null ? 'Pas de donnée' : Math.round(v) + EH.NBSP + '%');
       const upcoming = d.activities.filter((a) => a.centre === c && a.status === 'planned' && a.date > EH.TODAY && EH.days(EH.TODAY, a.date) <= 14).sort(EH.by('date'));
       const lessons = d.knowledge.filter((x) => x.status === 'published' && x.centre !== c && x.review >= EH.TODAY).sort(EH.by('created', -1)).slice(0, 3);
-      const showAll = EH.f('td.all', '') === '1', LIMIT = 8;
+      const showAll = EH.f('td.all', '') === '1', LIMIT = 10;
       const todo = items.length ? (showAll ? items : items.slice(0, LIMIT)).map((x, i) => `<div class="list-row">${C.ico(x.icon, x.sev)}<div class="body"><div class="title">${esc(x.title)}</div><div class="meta truncate">${esc(x.meta)}</div></div><div class="row-actions">${C.btn(x.btn[0], { action: x.btn[1], data: x.btn[2], size: 'sm', variant: i === 0 ? 'primary' : '' })}</div></div>`).join('') : C.empty({ title: 'Rien à faire pour le moment', text: 'Toutes vos activités sont clôturées et chaque entrepreneur a eu une séance ce mois-ci.' });
       const more = items.length > LIMIT ? C.btn(showAll ? 'Réduire' : `Afficher les ${items.length - LIMIT} autres`, { action: 'filter', data: { key: 'td.all', value: showAll ? '' : '1' }, variant: 'ghost', size: 'sm' }) : '';
       return C.pageHead(`Bonjour ${esc(u.name.split(' ')[0])}`, `${EH.fmtDay(EH.TODAY)} · ${all.length ? EH.plural(all.length, 'point') + ' à traiter' : 'tout est à jour'}. Raccourcis clavier : S séance, C candidat, A activité.`,
