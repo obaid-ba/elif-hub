@@ -1,4 +1,6 @@
-/* ELIFE Hub demo video v2 — défis 1, 2, 4, 8. Engine + scenario (v1 is frozen in video/v1/).
+/* ELIFE Hub demo video v3 « pitch » — défis 1, 2, 4, 8, without captions or music, slowed down to ≈ 40 s per défi
+   so the presenter can explain over it. Same scenario as v2 (frozen in video/v2/), played through a time warp.
+   v1 is frozen in video/v1/.
    Every visual is a pure function of time t (seconds). App interactions are real: they fire once, in order,
    when the timeline crosses their time. The app's timers and clock run on the video clock (10:15 on 19 Nov),
    so toasts and timestamps look natural. render.mjs calls window.renderFrame(i) for i = 0..FRAMES-1. */
@@ -397,7 +399,19 @@
     appear(el, '.brand, .tag, .team, .credit, .foot', t, 0.3, 0.6, 16);
   }, { fi: 0.5, fo: 0.01 });
 
-  const DURATION = 121.5;
+  const DURATION = 121.5; // scenario length (seconds, v2 timing)
+
+  /* ---------- v3 pitch: what is shown, and the slow-motion time warp ---------- */
+  const SHOW = { captions: false, banners: false, cards: true };
+  const SECTION_SECONDS = 40; // each défi (section card + workflow demo) lasts this long in the video
+  /** [scenario start, scenario end, video length] — the opening and the ending keep their real speed. */
+  const WARP = [[0, 7.0, 7.0], [7.0, 37.0, SECTION_SECONDS], [37.0, 66.2, SECTION_SECONDS], [66.2, 90.0, SECTION_SECONDS], [90.0, 111.2, SECTION_SECONDS], [111.2, DURATION, DURATION - 111.2]];
+  let vacc = 0;
+  const SEG = WARP.map(([s0, s1, len]) => { const g = { s0, s1, v0: vacc, v1: vacc + len }; vacc += len; return g; });
+  const VDURATION = vacc;
+  const toScene = (tv) => { const g = SEG.find((x) => tv < x.v1) || SEG[SEG.length - 1]; return g.s0 + (Math.min(tv, g.v1) - g.v0) * (g.s1 - g.s0) / (g.v1 - g.v0); };
+  const toVideo = (ts) => { const g = SEG.find((x) => ts < x.s1) || SEG[SEG.length - 1]; return g.v0 + (Math.min(ts, g.s1) - g.s0) * (g.v1 - g.v0) / (g.s1 - g.s0); };
+  const SECTIONS = [['1', 'Programmes et activités'], ['2', 'Parcours entrepreneur'], ['4', 'Centralisation et reporting'], ['8', 'Pilotage et décision']].map(([n, title], i) => ({ n, title, v0: SEG[i + 1].v0, v1: SEG[i + 1].v1 }));
   events.sort((a, b) => a.t - b.t);
   camKeys.sort((a, b) => a.t - b.t);
   curKeys.sort((a, b) => a.t - b.t);
@@ -428,7 +442,7 @@
 
     // captions
     let cap = null;
-    for (const c of captions) { const o = env(t, c.t0, c.t1, 0.4, 0.3); if (o > 0) cap = { c, o, k: easeOut(prog(t, c.t0, 0.5)) }; }
+    for (const c of (SHOW.captions ? captions : [])) { const o = env(t, c.t0, c.t1, 0.4, 0.3); if (o > 0) cap = { c, o, k: easeOut(prog(t, c.t0, 0.5)) }; }
     const capEl = $s('caption');
     if (cap) {
       if (capEl.dataset.id !== String(cap.c.t0)) { $s('cap-kicker').innerHTML = cap.c.kicker || ''; $s('cap-title').innerHTML = cap.c.title || ''; $s('cap-sub').innerHTML = cap.c.sub || ''; capEl.dataset.id = String(cap.c.t0); }
@@ -438,7 +452,7 @@
 
     // annotation cards (kept clear of the caption area)
     for (const c of cards) {
-      const o = env(t, c.t0, c.t1, 0.4, 0.3);
+      const o = SHOW.cards ? env(t, c.t0, c.t1, 0.4, 0.3) : 0;
       if (o <= 0) { c.el.style.opacity = 0; continue; }
       if (c.live && !c.filled) { c.el.querySelector('div').innerHTML = c.live(); c.filled = true; }
       const el = c.get(); const r = el ? rectOf(el) : null;
@@ -483,7 +497,7 @@
     // result banner
     const bn = $s('banner');
     let bb = null;
-    for (const b of banners) { const o = env(t, b.t0, b.t1, 0.35, 0.3); if (o > 0) bb = { b, o }; }
+    for (const b of (SHOW.banners ? banners : [])) { const o = env(t, b.t0, b.t1, 0.35, 0.3); if (o > 0) bb = { b, o }; }
     if (bb) { if (bn.dataset.id !== String(bb.b.t0)) { $s('banner-text').textContent = bb.b.text; bn.dataset.id = String(bb.b.t0); } bn.style.opacity = bb.o; bn.style.transform = `translateX(-50%) scale(${0.94 + 0.06 * easeOut(prog(t, bb.b.t0, 0.4))})`; }
     else bn.style.opacity = 0;
 
@@ -521,7 +535,7 @@
 
   let lastFrame = -1;
   window.renderFrame = async (i) => {
-    const t = i / FPS;
+    const t = toScene(i / FPS); // video time → scenario time (slow motion inside each défi)
     if (i <= lastFrame) return;
     lastFrame = i; vnow = t * 1000;
     for (const e of events) if (!e.done && e.t <= t) { e.done = true; try { await e.fn(); } catch (err) { console.error('event', e.t, err); } }
@@ -531,7 +545,7 @@
 
   /* ---------- setup: fresh demo data, officer of Djerba on the activities page ---------- */
   const SRT = () => [...captions.map((c) => ({ t0: c.t0, t1: c.t1, text: [c.kicker, strip(c.title), strip(c.sub)].filter(Boolean).join(' — ') })), ...banners.map((b) => ({ t0: b.t0, t1: b.t1, text: 'Résultat — ' + b.text }))].sort((a, b) => a.t0 - b.t0);
-  window.VIDEO = { FPS, DURATION, FRAMES: Math.round(DURATION * FPS), clicks: clicks.slice().sort((a, b) => a - b), wipes: [...wipes.map((w) => w.tMid), ...whooshes].sort((a, b) => a - b), scenes: fulls.map((f) => [f.t0, f.t1]), subtitles: SRT() };
+  window.VIDEO = { FPS, DURATION: VDURATION, FRAMES: Math.round(VDURATION * FPS), clicks: clicks.map(toVideo).sort((a, b) => a - b), wipes: [...wipes.map((w) => w.tMid), ...whooshes].map(toVideo).sort((a, b) => a - b), scenes: fulls.map((f) => [toVideo(f.t0), toVideo(f.t1)]), subtitles: SRT().map((s) => ({ ...s, t0: toVideo(s.t0), t1: toVideo(s.t1) })), sections: SECTIONS, audio: { music: false, clicks: 0.5, whoosh: 0.35 }, notesOnly: !SHOW.captions };
   window.stageReady = new Promise((resolve) => {
     const go = async () => {
       const w = W();

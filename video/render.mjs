@@ -1,6 +1,8 @@
 // Renders the demo video frame by frame (deterministic) and encodes it.
 // Usage:
-//   node video/render.mjs                         v2 (défis 1, 2, 4, 8) → video/out/elife-hub-demo-v2.mp4 + .srt
+//   node video/render.mjs                         v3 « pitch » (défis 1, 2, 4, 8, no captions, no music, ≈ 40 s per défi)
+//                                                 → video/out/elife-hub-demo-v3.mp4 + .srt (speaker cues, not burned in)
+//   node video/render.mjs --version v2            v2 (frozen in video/v2/) → video/out/elife-hub-demo-v2.mp4
 //   node video/render.mjs --version v1            v1 (frozen in video/v1/) → video/out/elife-hub-demo-v1.mp4
 //   node video/render.mjs --stills 3,27,50        PNG stills at these seconds → video/out/stills/
 //   node video/render.mjs --fps 30 --to 40        faster draft (lower frame rate, partial)
@@ -22,8 +24,8 @@ const ROOT = path.join(HERE, '..');
 const OUT = path.join(HERE, 'out');
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const has = (k) => process.argv.includes('--' + k);
-const VERSION = arg('version', 'v2');
-const STAGE = VERSION === 'v1' ? '/video/v1/stage.html' : '/video/stage.html';
+const VERSION = arg('version', 'v3');
+const STAGE = VERSION === 'v1' ? '/video/v1/stage.html' : VERSION === 'v2' ? '/video/v2/stage.html' : '/video/stage.html';
 const STILLS = arg('stills') ? arg('stills').split(',').map(Number) : null;
 const fpsOut = +arg('fps', 60);
 const F = {
@@ -38,6 +40,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const sysFfmpeg = spawnSync('which', ['ffmpeg']).status === 0;
 
 /** Music + optional voice-over (music ducked under the voice) → final MP4. */
+const musicOn = () => { try { const c = JSON.parse(fs.readFileSync(F.cues, 'utf8')); return !c.audio || c.audio.music !== false; } catch (e) { return true; } };
 const mux = () => {
   if (!sysFfmpeg) { console.log('ffmpeg absent : installez-le pour produire le MP4 avec le son.'); return; }
   const args = ['-y', '-i', F.videoOnly, '-i', F.wav];
@@ -45,7 +48,7 @@ const mux = () => {
     args.push('-i', F.voice, '-filter_complex',
       '[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=1.6,asplit=2[vo][sc];[1:a][sc]sidechaincompress=threshold=0.04:ratio=8:attack=20:release=400[duck];[duck][vo]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11[a]',
       '-map', '0:v', '-map', '[a]');
-  } else args.push('-map', '0:v', '-map', '1:a', '-af', 'loudnorm=I=-14:TP=-1.5:LRA=11');
+  } else args.push('-map', '0:v', '-map', '1:a', ...(musicOn() ? ['-af', 'loudnorm=I=-14:TP=-1.5:LRA=11'] : []));
   args.push('-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-shortest', '-movflags', '+faststart', F.final);
   spawnSync('ffmpeg', args, { stdio: ['ignore', 'ignore', 'inherit'] });
   console.log('Vidéo :', path.relative(ROOT, F.final), F.voice ? `(voix off : ${path.basename(F.voice)})` : '(musique seule)');
@@ -81,7 +84,7 @@ const V = await page.evaluate(() => window.VIDEO);
 const stage = await page.$('#stage');
 const step = Math.round(V.FPS / fpsOut);
 const last = Math.min(V.FRAMES, Math.round(+arg('to', V.DURATION) * V.FPS));
-const cues = { duration: last / V.FPS, clicks: V.clicks.filter((c) => c < last / V.FPS), wipes: V.wipes.filter((w) => w < last / V.FPS), scenes: V.scenes };
+const cues = { duration: last / V.FPS, clicks: V.clicks.filter((c) => c < last / V.FPS), wipes: V.wipes.filter((w) => w < last / V.FPS), scenes: V.scenes, audio: V.audio };
 fs.writeFileSync(F.cues, JSON.stringify(cues, null, 1));
 
 // subtitles (.srt) from the on-screen titles

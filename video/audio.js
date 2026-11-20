@@ -20,6 +20,7 @@
   };
 
   window.renderAudio = async (cues) => {
+    const opt = Object.assign({ music: true, clicks: 1, whoosh: 1 }, cues.audio || {});
     const dur = cues.duration + 0.5;
     const ctx = new OfflineAudioContext(2, Math.ceil(SR * dur), SR);
     const master = ctx.createGain(); master.gain.value = 0.9;
@@ -32,7 +33,7 @@
     music.gain.setValueAtTime(0.85, dur - 3.2); music.gain.linearRampToValueAtTime(0, dur - 0.3);
 
     const CH = 4.0, BEAT = 0.625;
-    for (let t = 0, k = 0; t < dur; t += CH, k++) {
+    for (let t = 0, k = 0; opt.music && t < dur; t += CH, k++) {
       const ch = CHORDS[k % CHORDS.length];
       // pad: two detuned triangles per note through a soft low-pass
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 0.3;
@@ -58,13 +59,13 @@
     }
     // closing chord on the logo
     const endT = dur - 6.2;
-    CHORDS[0].concat([62, 66]).forEach((n) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = midi(n + 12); const g = ctx.createGain(); g.gain.setValueAtTime(0, endT); g.gain.linearRampToValueAtTime(0.03, endT + 0.4); g.gain.exponentialRampToValueAtTime(0.001, dur - 0.2); o.connect(g); g.connect(master); g.connect(rv); o.start(endT); o.stop(dur); });
+    if (opt.music) CHORDS[0].concat([62, 66]).forEach((n) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = midi(n + 12); const g = ctx.createGain(); g.gain.setValueAtTime(0, endT); g.gain.linearRampToValueAtTime(0.03, endT + 0.4); g.gain.exponentialRampToValueAtTime(0.001, dur - 0.2); o.connect(g); g.connect(master); g.connect(rv); o.start(endT); o.stop(dur); });
 
     // UI clicks: short, soft, slightly pitched
     cues.clicks.forEach((ct) => {
       const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(1900, ct); o.frequency.exponentialRampToValueAtTime(900, ct + 0.05);
-      const g = ctx.createGain(); g.gain.setValueAtTime(0, ct); g.gain.linearRampToValueAtTime(0.22, ct + 0.003); g.gain.exponentialRampToValueAtTime(0.001, ct + 0.07);
-      const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.03); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500; const ng = ctx.createGain(); ng.gain.setValueAtTime(0.06, ct); ng.gain.exponentialRampToValueAtTime(0.001, ct + 0.025);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, ct); g.gain.linearRampToValueAtTime(0.22 * opt.clicks, ct + 0.003); g.gain.exponentialRampToValueAtTime(0.001, ct + 0.07);
+      const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 0.03); const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3500; const ng = ctx.createGain(); ng.gain.setValueAtTime(0.06 * opt.clicks, ct); ng.gain.exponentialRampToValueAtTime(0.001, ct + 0.025);
       o.connect(g); g.connect(master); n.connect(hp); hp.connect(ng); ng.connect(master);
       o.start(ct); o.stop(ct + 0.08); n.start(ct);
     });
@@ -72,7 +73,7 @@
     cues.wipes.forEach((wt) => {
       const t0 = wt - 0.55, n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, 1.4);
       const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9; bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(2600, wt); bp.frequency.exponentialRampToValueAtTime(500, wt + 0.7);
-      const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.32, wt - 0.05); g.gain.exponentialRampToValueAtTime(0.001, wt + 0.8);
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.32 * opt.whoosh, wt - 0.05); g.gain.exponentialRampToValueAtTime(0.001, wt + 0.8);
       n.connect(bp); bp.connect(g); g.connect(master); g.connect(rv); n.start(t0); n.stop(t0 + 1.4);
     });
 
@@ -84,7 +85,7 @@
     w(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
     out.setUint32(24, SR, true); out.setUint32(28, SR * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 4, true);
     let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
-    const norm = peak > 0 ? 0.89 / peak : 1; // −1 dBFS
+    const norm = !opt.music ? 1 : peak > 0 ? 0.89 / peak : 1; // music: −1 dBFS peak; effects only: natural level
     for (let i = 0; i < n; i++) { out.setInt16(44 + i * 4, Math.max(-1, Math.min(1, L[i] * norm)) * 32767, true); out.setInt16(46 + i * 4, Math.max(-1, Math.min(1, R[i] * norm)) * 32767, true); }
     const bytes = new Uint8Array(out.buffer); let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
